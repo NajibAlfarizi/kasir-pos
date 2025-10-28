@@ -3,6 +3,12 @@
 import * as React from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
 // icons
 import { toast } from 'sonner'
@@ -10,6 +16,7 @@ import { toast } from 'sonner'
 // icons
 
 type Product = { id: number; name: string; price: number; stock: number }
+type Category = { id: number; name: string }
 type CartLine = { id: string; product?: Product; productId?: number; name?: string; qty: number; price: number }
 type ReceiptItem = { id: number; product?: Product | null; quantity: number; subtotal: number }
 type Receipt = { id: number; total: number; paid: number; change: number; createdAt: string; items: ReceiptItem[] }
@@ -19,6 +26,12 @@ export default function KasirPage() {
   const [debouncedQuery, setDebouncedQuery] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [products, setProducts] = React.useState<Product[]>([])
+  const [categories, setCategories] = React.useState<Category[]>([])
+  const [brands, setBrands] = React.useState<{ id: number; name: string }[]>([])
+  const [catFilter, setCatFilter] = React.useState('')
+  const [brandFilter, setBrandFilter] = React.useState('')
+  const [selectedCategory, setSelectedCategory] = React.useState<number | ''>('')
+  const [selectedBrand, setSelectedBrand] = React.useState<number | ''>('')
   const [highlightedIds, setHighlightedIds] = React.useState<number[]>([])
   const [cart, setCart] = React.useState<CartLine[]>([])
   const [manualName, setManualName] = React.useState('')
@@ -38,7 +51,9 @@ export default function KasirPage() {
     try {
       const params = new URLSearchParams()
       if (debouncedQuery) params.set('q', debouncedQuery)
-      params.set('perPage', '12')
+      // show all products (no per-page limit)
+      if (selectedCategory !== '') params.set('categoryId', String(selectedCategory))
+      if (selectedBrand !== '') params.set('brandId', String(selectedBrand))
       const res = await fetch(`/api/produk?${params.toString()}`)
       const json = await res.json()
       setProducts(json.data || [])
@@ -48,9 +63,46 @@ export default function KasirPage() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedQuery])
+  }, [debouncedQuery, selectedCategory, selectedBrand])
 
   React.useEffect(() => { fetchProducts() }, [fetchProducts])
+
+  // load categories for filter + quick chips
+  React.useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/kategori')
+        if (!res.ok) return
+  const json = await res.json()
+  if (!mounted) return
+  // API may return either an array or an object like { data: [] }
+  const data = Array.isArray(json) ? json : (json?.data ?? [])
+  setCategories(data)
+      } catch (err) {
+        console.error('load categories', err)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  // load brands for filter
+  React.useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/brand')
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        const data = Array.isArray(json) ? json : (json?.data ?? [])
+        setBrands(data)
+      } catch (err) {
+        console.error('load brands', err)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
 
   const addToCart = (p: Product) => {
     setCart((c) => {
@@ -143,7 +195,7 @@ export default function KasirPage() {
 
   return (
     <div className="space-y-4">
-      <header className="flex items-center justify-between">
+      <header className="sticky top-4 z-40 bg-white/80 backdrop-blur-sm rounded-md px-4 py-3 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900">KasirQu</h1>
           <p className="text-sm text-slate-500">Cepat. Bersih. Aman. Tambahkan produk lalu lakukan pembayaran.</p>
@@ -151,7 +203,7 @@ export default function KasirPage() {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-white shadow-sm rounded-lg px-3 py-2">
-            <Input placeholder="Cari produk..." value={query} onChange={(e) => setQuery(e.target.value)} className="w-80 bg-transparent" />
+            <Input placeholder="Cari produk..." value={query} onChange={(e) => setQuery(e.target.value)} className="w-56 md:w-80 bg-transparent" />
             {loading && <Spinner />}
           </div>
           <Button onClick={() => { setCart([]); toast('Keranjang dikosongkan') }} className="bg-red-50 text-red-700 hover:bg-red-100">Kosongkan</Button>
@@ -159,45 +211,123 @@ export default function KasirPage() {
       </header>
 
       <main className="grid grid-cols-12 gap-6">
-        {/* Products column */}
-        <section className="col-span-6">
+  {/* Products column */}
+  <section className="col-span-12 lg:col-span-7">
           <div className="bg-gradient-to-b from-white to-slate-50 rounded-lg p-4 shadow">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {products.map(p => (
-                <article
-                  key={p.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => p.stock > 0 && addToCart(p)}
-                  onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && p.stock > 0) { e.preventDefault(); addToCart(p) } }}
-                  aria-disabled={p.stock <= 0}
-                  className={`relative rounded-lg border overflow-hidden h-full min-h-[72px] p-2 ${highlightedIds.includes(p.id) ? 'ring-2 ring-amber-300 bg-amber-50' : 'bg-white'} transition-shadow hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-sky-200 ${p.stock > 0 ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
-                >
-                  <div className="flex flex-col h-full justify-between">
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-800 leading-tight mb-1" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
-                      {p.stock <= 0 ? (
-                        <div className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 mb-2">Stok Habis</div>
-                      ) : (
-                        <div className="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 mb-2">Stok: {p.stock}</div>
-                      )}
-                    </div>
+            {/* Filters: category select + quick chips */}
+            <div className="flex items-center justify-between mb-4 gap-3">
+              <div className="flex items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="inline-flex items-center gap-2 px-4 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md">
+                      <span className="font-medium">{selectedCategory === '' ? 'Semua Kategori' : (categories.find(c => c.id === selectedCategory)?.name ?? 'Kategori')}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </DropdownMenuTrigger>
 
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-emerald-600">{fmt.format(p.price)}</div>
-                      {p.stock <= 0 ? <div className="text-xs text-slate-400">Tidak tersedia</div> : null}
+                  <DropdownMenuContent className="max-w-xs">
+                    <div className="px-2 py-1">
+                      <input
+                        value={catFilter}
+                        onChange={(e) => setCatFilter(e.target.value)}
+                        placeholder="Cari kategori..."
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      />
                     </div>
+                    <div className="max-h-56 overflow-auto">
+                      {categories.filter(c => c.name.toLowerCase().includes(catFilter.toLowerCase())).map(cat => (
+                        <DropdownMenuItem key={cat.id} onSelect={() => { setSelectedCategory(cat.id); setCatFilter('') }}>
+                          <div className="flex items-center justify-between w-full">
+                            <span>{cat.name}</span>
+                            {selectedCategory === cat.id ? <span className="text-sky-600">✓</span> : null}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                    <DropdownMenuItem onSelect={() => { setSelectedCategory(''); setCatFilter('') }}>
+                      Semua Kategori
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                  <div className="ml-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="inline-flex items-center gap-2 px-4 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md">
+                          <span className="font-medium">{selectedBrand === '' ? 'Semua Brand' : (brands.find(b => b.id === selectedBrand)?.name ?? 'Brand')}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent className="max-w-xs">
+                        <div className="px-2 py-1">
+                          <input value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} placeholder="Cari brand..." className="w-full border rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div className="max-h-56 overflow-auto">
+                          {brands.filter(b => b.name.toLowerCase().includes(brandFilter.toLowerCase())).map(b => (
+                            <DropdownMenuItem key={b.id} onSelect={() => { setSelectedBrand(b.id); setBrandFilter('') }}>
+                              <div className="flex items-center justify-between w-full">
+                                <span>{b.name}</span>
+                                {selectedBrand === b.id ? <span className="text-sky-600">✓</span> : null}
+                              </div>
+                            </DropdownMenuItem>
+                          ))}
+                        </div>
+                        <DropdownMenuItem onSelect={() => { setSelectedBrand(''); setBrandFilter('') }}>
+                          Semua Brand
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                </article>
-              ))}
+              </div>
+            </div>
 
-              {products.length === 0 && !loading && <div className="col-span-3 text-center text-sm text-slate-500">Tidak ada produk</div>}
+            {/* Products grid - show all products (no fixed max height) */}
+            <div className="pr-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3">
+                {products.map(p => (
+                  <article
+                    key={p.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => p.stock > 0 && addToCart(p)}
+                    onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && p.stock > 0) { e.preventDefault(); addToCart(p) } }}
+                    aria-disabled={p.stock <= 0}
+                    className={`relative rounded-lg border overflow-hidden h-full min-h-[72px] p-2 ${highlightedIds.includes(p.id) ? 'ring-2 ring-amber-300 bg-amber-50' : 'bg-white'} transition-shadow hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-sky-200 ${p.stock > 0 ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
+                  >
+                    <div className="flex flex-col h-full justify-between">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-800 leading-tight mb-1" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
+                        {p.stock <= 0 ? (
+                          <div className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 mb-2">Stok Habis</div>
+                        ) : (
+                          <div className="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 mb-2">Stok: {p.stock}</div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-semibold text-emerald-600">{fmt.format(p.price)}</div>
+                        {p.stock <= 0 ? <div className="text-xs text-slate-400">Tidak tersedia</div> : null}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+
+                {products.length === 0 && !loading && (
+                  <div className="col-span-full text-center text-sm text-slate-500">
+                    {selectedCategory === '' ? 'Tidak ada produk' : 'Tidak ada produk dengan kategori ini'}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </section>
 
         {/* Checkout / Cart column */}
-  <aside className="col-span-6">
+  <aside className="col-span-12 lg:col-span-5">
           <div className="sticky top-6 bg-white rounded-lg shadow p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="text-lg font-semibold text-slate-800">Keranjang</div>
@@ -231,8 +361,8 @@ export default function KasirPage() {
               <input placeholder="Nama produk" value={manualName} onChange={(e) => setManualName(e.target.value)} className="w-full border px-2 py-1 rounded mb-2" />
               <input placeholder="Harga (IDR)" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} type="number" className="w-full border px-2 py-1 rounded mb-2" />
               <div className="flex gap-2">
-                <Button onClick={addManualToCart} className="w-full">Tambah</Button>
-                <Button variant="ghost" onClick={() => { setManualName(''); setManualPrice('') }} className="w-full">Batal</Button>
+                <Button onClick={addManualToCart} className="flex-1">Tambah</Button>
+                <Button variant="ghost" onClick={() => { setManualName(''); setManualPrice('') }} className="flex-1">Batal</Button>
               </div>
             </div>
 

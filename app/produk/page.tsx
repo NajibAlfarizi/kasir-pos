@@ -6,6 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
 import ModalProduk from "../components/ModalProduk"
 import { toast } from "sonner"
   import ConfirmDialog from "@/components/ConfirmDialog"
@@ -25,6 +31,7 @@ type Product = {
   cost?: number
   stock: number
   category?: { id: number; name: string } | null
+  brand?: { id: number; name: string } | null
 }
 
 export default function ProdukPage() {
@@ -37,6 +44,12 @@ export default function ProdukPage() {
   const [page, setPage] = React.useState(1)
   const [perPage, setPerPage] = React.useState(10)
   const [total, setTotal] = React.useState(0)
+  const [categories, setCategories] = React.useState<{ id: number; name: string }[]>([])
+  const [brands, setBrands] = React.useState<{ id: number; name: string }[]>([])
+  const [selectedCategory, setSelectedCategory] = React.useState<number | ''>('')
+  const [selectedBrand, setSelectedBrand] = React.useState<number | ''>('')
+  const [catFilter, setCatFilter] = React.useState('')
+  const [brandFilter, setBrandFilter] = React.useState('')
   const [sortBy, setSortBy] = React.useState<string[]>(['name'])
   const [sortDir, setSortDir] = React.useState<Array<'asc' | 'desc'>>(['asc'])
 
@@ -47,8 +60,8 @@ export default function ProdukPage() {
       setSortBy((prev) => {
         const idx = prev.indexOf(col)
         if (idx === -1) return [...prev, col]
-        return prev // keep
-      })
+          return prev // keep
+        })
       setSortDir((prev) => {
         const idx = sortBy.indexOf(col)
         if (idx === -1) return [...prev, 'asc']
@@ -73,11 +86,13 @@ export default function ProdukPage() {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-  if (debouncedQuery) params.set('q', debouncedQuery)
-  params.set('page', String(page))
-  params.set('perPage', String(perPage))
-  params.set('sortBy', sortBy.join(','))
-  params.set('sortDir', sortDir.join(','))
+      if (debouncedQuery) params.set('q', debouncedQuery)
+      if (selectedCategory !== '') params.set('categoryId', String(selectedCategory))
+  if (selectedBrand !== '') params.set('brandId', String(selectedBrand))
+      params.set('page', String(page))
+      params.set('perPage', String(perPage))
+      params.set('sortBy', sortBy.join(','))
+      params.set('sortDir', sortDir.join(','))
       const res = await fetch(`/api/produk?${params.toString()}`)
       const json = await res.json()
       setProducts(json.data || [])
@@ -88,9 +103,45 @@ export default function ProdukPage() {
     } finally {
       setLoading(false)
     }
-  }, [debouncedQuery, page, perPage, sortBy, sortDir])
+  }, [debouncedQuery, page, perPage, sortBy, sortDir, selectedCategory, selectedBrand])
 
   React.useEffect(() => { fetchProducts() }, [fetchProducts])
+
+  // load categories for product filter
+  React.useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/kategori')
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        const data = Array.isArray(json) ? json : (json?.data ?? [])
+        setCategories(data)
+      } catch (err) {
+        console.error('load categories', err)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
+
+  // load brands for product filter
+  React.useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/brand')
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        const data = Array.isArray(json) ? json : (json?.data ?? [])
+        setBrands(data)
+      } catch (err) {
+        console.error('load brands', err)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
 
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 300)
@@ -150,7 +201,67 @@ export default function ProdukPage() {
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3 bg-slate-50 rounded-md px-3 py-2">
-              <Input placeholder="Cari produk..." className="w-64 bg-transparent" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <Input placeholder="Cari produk..." className="w-64 bg-transparent" value={query} onChange={(e) => setQuery(e.target.value)} />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white text-sm hover:shadow-sm">
+                      <span className="font-medium">{selectedCategory === '' ? 'Semua Kategori' : (categories.find(c => c.id === selectedCategory)?.name ?? 'Kategori')}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </DropdownMenuTrigger>
+
+                  <DropdownMenuContent className="max-w-xs">
+                    <div className="px-2 py-1">
+                      <input value={catFilter} onChange={(e) => setCatFilter(e.target.value)} placeholder="Cari kategori..." className="w-full border rounded px-2 py-1 text-sm" />
+                    </div>
+                    <div className="max-h-56 overflow-auto">
+                      {categories.filter(c => c.name.toLowerCase().includes(catFilter.toLowerCase())).map(cat => (
+                        <DropdownMenuItem key={cat.id} onSelect={() => { setSelectedCategory(cat.id); setCatFilter(''); setPage(1) }}>
+                          <div className="flex items-center justify-between w-full">
+                            <span>{cat.name}</span>
+                            {selectedCategory === cat.id ? <span className="text-sky-600">✓</span> : null}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                    <DropdownMenuItem onSelect={() => { setSelectedCategory(''); setCatFilter(''); setPage(1) }}>
+                      Semua Kategori
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                  <div className="ml-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white text-sm hover:shadow-sm">
+                          <span className="font-medium">{selectedBrand === '' ? 'Semua Brand' : (brands.find(b => b.id === selectedBrand)?.name ?? 'Brand')}</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      </DropdownMenuTrigger>
+
+                      <DropdownMenuContent className="max-w-xs">
+                        <div className="px-2 py-1">
+                          <input value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} placeholder="Cari brand..." className="w-full border rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div className="max-h-56 overflow-auto">
+                          {brands.filter(b => b.name.toLowerCase().includes(brandFilter.toLowerCase())).map(b => (
+                            <DropdownMenuItem key={b.id} onSelect={() => { setSelectedBrand(b.id); setBrandFilter(''); setPage(1) }}>
+                              <div className="flex items-center justify-between w-full">
+                                <span>{b.name}</span>
+                                {selectedBrand === b.id ? <span className="text-sky-600">✓</span> : null}
+                              </div>
+                            </DropdownMenuItem>
+                          ))}
+                        </div>
+                        <DropdownMenuItem onSelect={() => { setSelectedBrand(''); setBrandFilter(''); setPage(1) }}>
+                          Semua Brand
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
             </div>
             <Button variant="default" onClick={onCreate} className="bg-sky-600 text-white hover:bg-sky-700">Buat Produk</Button>
           </div>
@@ -186,6 +297,7 @@ export default function ProdukPage() {
                     <TableHead className="w-28 text-right">Harga Modal</TableHead>
                     <TableHead className="w-20">Stok</TableHead>
                     <TableHead className="w-28 hidden md:table-cell">Kategori</TableHead>
+                    <TableHead className="w-28 hidden md:table-cell">Brand</TableHead>
                     <TableHead className="w-28 text-right">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -210,6 +322,11 @@ export default function ProdukPage() {
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 truncate max-w-[140px]">{p.category.name}</span>
                         ) : '-'}
                       </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {p.brand ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 truncate max-w-[140px]">{p.brand.name}</span>
+                        ) : '-'}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button variant="ghost" size="sm" onClick={() => onEdit(p)} className="text-sky-600 hover:bg-sky-50 px-2 py-1">Edit</Button>
@@ -220,7 +337,7 @@ export default function ProdukPage() {
                   ))}
                   {filtered.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center">Tidak ada produk</TableCell>
+                      <TableCell colSpan={8} className="text-center">Tidak ada produk</TableCell>
                     </TableRow>
                   )}
                 </TableBody>

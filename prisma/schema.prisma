@@ -34,8 +34,17 @@ model Product {
   stock      Int
   categoryId Int?
   category   Category? @relation(fields: [categoryId], references: [id])
+  brandId    Int?
+  brand      Brand?    @relation(fields: [brandId], references: [id])
   createdAt  DateTime  @default(now())
   transactionItems TransactionItem[]
+}
+
+model Brand {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
 }
 
 model Transaction {

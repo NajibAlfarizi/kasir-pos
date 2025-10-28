@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import CategorySelect from "./CategorySelect"
+import BrandSelect from "./BrandSelect"
 import { toast } from "sonner"
 
 type Props = {
   open: boolean
   onClose: () => void
   onSaved?: (data?: unknown) => void
-  editing: { id: number; name: string; price: number; stock: number; cost?: number; category?: { id: number } | null } | null
+  editing: { id: number; name: string; price: number; stock: number; cost?: number; category?: { id: number } | null; brand?: { id: number } | null } | null
 }
 
 export default function ModalProduk({ open, onClose, onSaved, editing }: Props) {
@@ -21,6 +22,7 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
   const [cost, setCost] = React.useState("")
   const [stock, setStock] = React.useState("")
   const [categoryId, setCategoryId] = React.useState<number | null>(null)
+  const [brandId, setBrandId] = React.useState<number | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
@@ -33,12 +35,14 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
       setCost(String(editing.cost ?? ""))
       setStock(String(editing.stock ?? ""))
       setCategoryId(editing.category?.id ?? null)
+      setBrandId(editing.brand?.id ?? null)
     } else {
       setName("")
       setPrice("")
       setCost("")
       setStock("")
       setCategoryId(null)
+      setBrandId(null)
     }
   }, [editing])
 
@@ -92,9 +96,10 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
 
     setSaving(true)
     try {
-  const method = editing ? 'PUT' : 'POST'
-  const body: { name: string; price: number; cost?: number; stock: number; categoryId?: number; id?: number } = { name: trimmed, price: p, cost: c, stock: s }
+    const method = editing ? 'PUT' : 'POST'
+    const body: { name: string; price: number; cost?: number; stock: number; categoryId?: number; brandId?: number; id?: number } = { name: trimmed, price: p, cost: c, stock: s }
       if (categoryId) body.categoryId = categoryId
+      if (brandId) body.brandId = brandId
       if (editing) body.id = editing.id
 
       const res = await fetch('/api/produk', { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
@@ -187,7 +192,16 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
           </div>
           <div className="mb-3">
             <label className="block text-sm mb-1">Kategori</label>
-            <CategorySelect value={categoryId ?? undefined} onChange={(v: number) => setCategoryId(v)} />
+            <div className="flex flex-col sm:flex-row items-start gap-3">
+              <div>
+                <div className="text-sm mb-1">Kategori</div>
+                <CategorySelect value={categoryId ?? undefined} onChange={(v: number) => setCategoryId(v)} />
+              </div>
+              <div>
+                <div className="text-sm mb-1">Brand</div>
+                <BrandSelect value={brandId ?? undefined} onChange={(v: number) => setBrandId(v)} />
+              </div>
+            </div>
           </div>
           {error && <div className="text-sm text-destructive mb-2">{error}</div>}
           <Separator />

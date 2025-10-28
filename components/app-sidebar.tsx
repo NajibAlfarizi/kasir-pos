@@ -10,6 +10,7 @@ import {
   PieChart,
   Settings2,
   SquareTerminal,
+  Tag,
 } from "lucide-react"
 
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
@@ -19,6 +20,7 @@ const navItems = [
   { title: 'Kasir', url: '/kasir', icon: Bot },
   { title: 'Produk', url: '/produk', icon: GalleryVerticalEnd },
   { title: 'Kategori', url: '/kategori', icon: BookOpen },
+  { title: 'Brand', url: '/brand', icon: Tag },
   { title: 'Transaksi', url: '/transaksi', icon: PieChart },
   { title: 'Pengaturan', url: '/settings', icon: Settings2 },
 ]

@@ -1,5 +1,7 @@
 // API route untuk produk (CRUD)
 import prisma from "../../../lib/prisma"
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const db: any = prisma
 import { Prisma } from '@prisma/client'
 
 export async function GET(req: Request) {
@@ -9,34 +11,46 @@ export async function GET(req: Request) {
     const id = url.searchParams.get('id')
   const q = (url.searchParams.get('q') ?? '').trim()
   const pageRaw = Number(url.searchParams.get('page') || '1')
-  const perPageRaw = Number(url.searchParams.get('perPage') || '10')
+  // If perPage is omitted we will return all items (no pagination). If provided, parse it.
+  const perPageParam = url.searchParams.get('perPage')
+  const perPageRaw = perPageParam === null ? null : Number(perPageParam)
   const page = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1
-  const perPage = Number.isInteger(perPageRaw) && perPageRaw > 0 ? perPageRaw : 10
+  const perPage = perPageRaw === null ? null : (Number.isInteger(perPageRaw) && perPageRaw > 0 ? perPageRaw : 10)
   const sortByParam = url.searchParams.get('sortBy') ?? 'name'
   const sortDirParam = (url.searchParams.get('sortDir') ?? 'asc').toLowerCase()
   const sortByArray = sortByParam.split(',').map(s => s.trim()).filter(Boolean)
   const sortDirArray = sortDirParam.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
 
     if (id) {
-      const product = await prisma.product.findUnique({ where: { id: Number(id) }, include: { category: true } })
+      const product = await db.product.findUnique({ where: { id: Number(id) }, include: { category: true, brand: true } })
       if (!product) return new Response(JSON.stringify({ error: 'Produk tidak ditemukan' }), { status: 404 })
       return new Response(JSON.stringify(product), { status: 200 })
     }
 
-  const where: Prisma.ProductWhereInput = {}
+  // Use a permissive any-typed where to avoid TS issues when generated Prisma types
+  // may be out-of-sync during iterative development. This keeps runtime behavior
+  // intact while avoiding strict compile errors; remove `any` once types are up-to-date.
+  const where: any = {}
+    // filter by brandId when provided
+    const brandParam = url.searchParams.get('brandId')
+    if (brandParam !== null && brandParam !== '') {
+      const parsedBrand = Number(brandParam)
+      if (Number.isInteger(parsedBrand)) where.brandId = parsedBrand
+    }
     if (q) {
       where.OR = [
         { name: { contains: q } },
         { category: { is: { name: { contains: q } } } },
+        { brand: { is: { name: { contains: q } } } },
       ]
     }
 
-    const total = await prisma.product.count({ where })
+  const total = await db.product.count({ where })
 
     // If query provided, do fuzzy ranking in JS (fetch candidates, score & sort), then paginate
     if (q) {
       // get candidates matching simple contains filter (to limit scope)
-      const candidates = await prisma.product.findMany({ where, include: { category: true } })
+  const candidates = await db.product.findMany({ where, include: ({ category: true, brand: true } as any) })
 
       // Levenshtein distance implementation
       const levenshtein = (a: string, b: string) => {
@@ -66,13 +80,14 @@ export async function GET(req: Request) {
         return maxLen === 0 ? 1 : 1 - dist / maxLen
       }
 
-      // compute score per candidate (name and category) and attach
-      const scored = candidates.map((p) => {
-        const nameScore = normalizedScore(p.name || '', q)
-        const catScore = normalizedScore(p.category?.name || '', q)
-        const score = Math.max(nameScore, catScore)
-        return { product: p, score }
-      })
+  // compute score per candidate (name, category, brand) and attach
+  const scored = (candidates as any[]).map((p: any) => {
+    const nameScore = normalizedScore(p.name || '', q)
+    const catScore = normalizedScore(p.category?.name || '', q)
+    const brandScore = normalizedScore(p.brand?.name || '', q)
+    const score = Math.max(nameScore, catScore, brandScore)
+    return { product: p, score }
+  })
 
       // primary sort: fuzzy score desc
       scored.sort((a, b) => b.score - a.score)
@@ -89,8 +104,12 @@ export async function GET(req: Request) {
             let aval: unknown = (a.product as unknown as Record<string, unknown>)[key]
             let bval: unknown = (b.product as unknown as Record<string, unknown>)[key]
             if (key === 'category') {
-              aval = a.product.category?.name ?? ''
-              bval = b.product.category?.name ?? ''
+              aval = (a.product as any).category?.name ?? ''
+              bval = (b.product as any).category?.name ?? ''
+            }
+            if (key === 'brand') {
+              aval = (a.product as any).brand?.name ?? ''
+              bval = (b.product as any).brand?.name ?? ''
             }
             const avalStr = aval === null || aval === undefined ? '' : String(aval)
             const bvalStr = bval === null || bval === undefined ? '' : String(bval)
@@ -102,6 +121,11 @@ export async function GET(req: Request) {
       }
 
       const totalMatches = scored.length
+      if (perPage === null) {
+        // return all matches when perPage omitted
+        const pageItems = scored.map(s => s.product)
+        return new Response(JSON.stringify({ data: pageItems, total: totalMatches, page: 1, perPage: totalMatches }), { status: 200 })
+      }
       const start = (page - 1) * perPage
       const end = start + perPage
       const pageItems = scored.slice(start, end).map(s => s.product)
@@ -109,7 +133,7 @@ export async function GET(req: Request) {
     }
 
     // No query: use database ordering and pagination (support multi-column)
-    const allowed = ['name', 'price', 'stock', 'createdAt', 'category']
+  const allowed = ['name', 'price', 'stock', 'createdAt', 'category', 'brand']
     const orderByArr: Prisma.ProductOrderByWithRelationInput[] = []
     for (let i = 0; i < sortByArray.length; i++) {
       const col = sortByArray[i]
@@ -122,10 +146,15 @@ export async function GET(req: Request) {
       }
     }
 
-    const products = await prisma.product.findMany({
+    if (perPage === null) {
+  const products = await db.product.findMany({ where, orderBy: orderByArr.length ? orderByArr : { name: 'asc' }, include: ({ category: true, brand: true } as any) })
+      return new Response(JSON.stringify({ data: products, total, page: 1, perPage: products.length }), { status: 200 })
+    }
+
+    const products = await db.product.findMany({
       where,
       orderBy: orderByArr.length ? orderByArr : { name: 'asc' },
-      include: { category: true },
+      include: ({ category: true, brand: true } as any),
       skip: (page - 1) * perPage,
       take: perPage,
     })
@@ -145,7 +174,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { name, price, stock, categoryId, cost } = body
+  const { name, price, stock, categoryId, cost, brandId } = body
     // stricter validation
     const trimmedName = typeof name === 'string' ? name.trim() : ''
     if (!trimmedName) return new Response(JSON.stringify({ error: 'Name is required' }), { status: 400 })
@@ -157,18 +186,28 @@ export async function POST(req: Request) {
     }
 
     let catId: number | null = null
+    let brId: number | null = null
     if (categoryId !== undefined && categoryId !== null && categoryId !== '') {
       const parsed = Number(categoryId)
       if (!Number.isInteger(parsed)) return new Response(JSON.stringify({ error: 'categoryId must be an integer' }), { status: 400 })
       // verify category exists
-      const cat = await prisma.category.findUnique({ where: { id: parsed } })
+      const cat = await db.category.findUnique({ where: { id: parsed } })
       if (!cat) return new Response(JSON.stringify({ error: 'Kategori tidak ditemukan' }), { status: 400 })
       catId = parsed
     }
+    if (brandId !== undefined && brandId !== null && brandId !== '') {
+      const parsedB = Number(brandId)
+      if (!Number.isInteger(parsedB)) return new Response(JSON.stringify({ error: 'brandId must be an integer' }), { status: 400 })
+      const br = await db.brand.findUnique({ where: { id: parsedB } })
+      if (!br) return new Response(JSON.stringify({ error: 'Brand tidak ditemukan' }), { status: 400 })
+      brId = parsedB
+    }
 
     // Build payload and cast to Prisma type to satisfy TS when client types lag schema updates
-    const payload = { name: trimmedName, price, cost: cost ?? 0, stock, categoryId: catId } as unknown as Prisma.ProductCreateInput
-    const created = await prisma.product.create({ data: payload })
+  const payload: any = { name: trimmedName, price, cost: cost ?? 0, stock }
+  if (catId !== null) payload.categoryId = catId
+  if (brId !== null) payload.brandId = brId
+  const created = await db.product.create({ data: payload })
     return new Response(JSON.stringify(created), { status: 201 })
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -184,7 +223,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json()
-    const { id, name, price, stock, categoryId, cost } = body
+    const { id, name, price, stock, categoryId, cost, brandId } = body
     if (id === undefined || id === null) return new Response(JSON.stringify({ error: 'id is required' }), { status: 400 })
     const parsedId = Number(id)
     if (!Number.isInteger(parsedId)) return new Response(JSON.stringify({ error: 'id must be an integer' }), { status: 400 })
@@ -196,17 +235,28 @@ export async function PUT(req: Request) {
     if (typeof stock !== 'number' || !Number.isInteger(stock) || stock < 0) return new Response(JSON.stringify({ error: 'Stock must be a non-negative integer' }), { status: 400 })
 
     let catId: number | null = null
+    let brId: number | null = null
     if (categoryId !== undefined && categoryId !== null && categoryId !== '') {
       const parsed = Number(categoryId)
       if (!Number.isInteger(parsed)) return new Response(JSON.stringify({ error: 'categoryId must be an integer' }), { status: 400 })
-      const cat = await prisma.category.findUnique({ where: { id: parsed } })
+      const cat = await db.category.findUnique({ where: { id: parsed } })
       if (!cat) return new Response(JSON.stringify({ error: 'Kategori tidak ditemukan' }), { status: 400 })
       catId = parsed
     }
+    if (brandId !== undefined && brandId !== null && brandId !== '') {
+      const parsedB = Number(brandId)
+      if (!Number.isInteger(parsedB)) return new Response(JSON.stringify({ error: 'brandId must be an integer' }), { status: 400 })
+      const br = await db.brand.findUnique({ where: { id: parsedB } })
+      if (!br) return new Response(JSON.stringify({ error: 'Brand tidak ditemukan' }), { status: 400 })
+      brId = parsedB
+    }
 
     // include cost if provided; cast to Prisma type to avoid TS errors when types are out of sync
-    const updateData = { name: trimmedName, price, stock, categoryId: catId, ...(cost !== undefined ? { cost } : {}) } as unknown as Prisma.ProductUpdateInput
-    const updated = await prisma.product.update({ where: { id: parsedId }, data: updateData })
+  const updateData: any = { name: trimmedName, price, stock }
+  if (catId !== null) updateData.categoryId = catId
+  if (brId !== null) updateData.brandId = brId
+  if (cost !== undefined) updateData.cost = cost
+  const updated = await db.product.update({ where: { id: parsedId }, data: updateData })
     return new Response(JSON.stringify(updated), { status: 200 })
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
