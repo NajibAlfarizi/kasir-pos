@@ -1,6 +1,8 @@
 // API route untuk transaksi (create + list)
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import prisma from "../../../lib/prisma"
+// Import the print transaction handler so we can trigger printing after a successful transaction
+import * as printTransactionHandler from "../print/transaction/[id]/route"
 import { Prisma } from '@prisma/client'
 
 type CreateItem = { productId?: number; quantity: number; price?: number; name?: string }
@@ -81,10 +83,48 @@ export async function POST(req: Request) {
       }
 
       const withItems = await tx.transaction.findUnique({ where: { id: created.id }, include: { items: { include: { product: true } } } })
+
       return withItems
     })
 
-    return new Response(JSON.stringify(result), { status: 201 })
+    // After the transaction completes, attempt to auto-print if settings enable it.
+    // We run this outside the DB transaction so printing errors don't affect DB state
+    // and so we can capture the print outcome and return it in the response for debugging.
+    let printInfo: { attempted: boolean; ok?: boolean; error?: string } | undefined = undefined
+    try {
+      const srows = await prisma.setting.findMany()
+      const settingsMap: Record<string, string> = {}
+      for (const r of srows) settingsMap[String(r.key)] = String(r.value ?? '')
+      const autoPrintVal = (settingsMap['print.auto'] ?? settingsMap['autoPrint'] ?? '').toString().toLowerCase()
+      const autoPrint = autoPrintVal === '1' || autoPrintVal === 'true' || autoPrintVal === 'yes'
+      if (autoPrint && result && (result as any).id) {
+        printInfo = { attempted: true }
+        try {
+          const pres = await (printTransactionHandler as any).POST(undefined, { params: { id: (result as any).id } })
+          try {
+            // try to read JSON if handler returned a Response-like object
+            if (pres && typeof pres.json === 'function') await pres.json()
+            printInfo.ok = true
+          } catch {
+            // reading body failed but handler likely ran; mark attempted
+            printInfo.ok = true
+          }
+        } catch (printErr) {
+          printInfo.ok = false
+          printInfo.error = String((printErr as any)?.message ?? printErr)
+          console.warn('Auto-print failed for transaction', (result as any).id, printErr)
+        }
+      } else {
+        printInfo = { attempted: false }
+      }
+    } catch (err) {
+      printInfo = { attempted: false, ok: false, error: String((err as any)?.message ?? err) }
+      console.warn('Auto-print settings lookup failed', err)
+    }
+
+    // Return the created transaction plus (optional) print metadata to help debugging
+    const payload = Object.assign({}, result, { _autoPrint: printInfo })
+    return new Response(JSON.stringify(payload), { status: 201 })
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       if (err.code === 'P2025') return new Response(JSON.stringify({ error: 'Record not found' }), { status: 404 })

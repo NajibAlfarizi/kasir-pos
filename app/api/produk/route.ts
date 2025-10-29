@@ -31,11 +31,16 @@ export async function GET(req: Request) {
   // may be out-of-sync during iterative development. This keeps runtime behavior
   // intact while avoiding strict compile errors; remove `any` once types are up-to-date.
   const where: any = {}
-    // filter by brandId when provided
+    // filter by brandId and categoryId when provided
     const brandParam = url.searchParams.get('brandId')
     if (brandParam !== null && brandParam !== '') {
       const parsedBrand = Number(brandParam)
       if (Number.isInteger(parsedBrand)) where.brandId = parsedBrand
+    }
+    const categoryParam = url.searchParams.get('categoryId')
+    if (categoryParam !== null && categoryParam !== '') {
+      const parsedCat = Number(categoryParam)
+      if (Number.isInteger(parsedCat)) where.categoryId = parsedCat
     }
     if (q) {
       where.OR = [

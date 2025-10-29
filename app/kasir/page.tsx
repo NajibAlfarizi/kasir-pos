@@ -38,6 +38,7 @@ export default function KasirPage() {
   const [manualPrice, setManualPrice] = React.useState<string>('')
   const [paidAmount, setPaidAmount] = React.useState<number | ''>('')
   const [receipt, setReceipt] = React.useState<Receipt | null>(null)
+  const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(false)
 
   const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' })
 
@@ -66,6 +67,24 @@ export default function KasirPage() {
   }, [debouncedQuery, selectedCategory, selectedBrand])
 
   React.useEffect(() => { fetchProducts() }, [fetchProducts])
+
+  // load settings to determine if client-side auto-print should be triggered
+  React.useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/settings')
+        if (!res.ok) return
+        const json = await res.json()
+        if (!mounted) return
+        const v = (json['print.auto'] ?? json['autoPrint'] ?? '').toString().toLowerCase()
+        setAutoPrintEnabled(v === '1' || v === 'true' || v === 'yes')
+      } catch (e) {
+        console.warn('Failed to load settings for auto-print', e)
+      }
+    })()
+    return () => { mounted = false }
+  }, [])
 
   // load categories for filter + quick chips
   React.useEffect(() => {
@@ -145,10 +164,10 @@ export default function KasirPage() {
   const handleCheckout = async () => {
     if (cart.length === 0) return toast.error('Cart kosong')
     // submitting inline handled by submitPayment
-    await submitPayment()
+    await submitPayment({ forcePrint: true })
   }
 
-  const submitPayment = async () => {
+  const submitPayment = async (opts?: { forcePrint?: boolean }) => {
     if (paidAmount === '' || typeof paidAmount !== 'number') return toast.error('Masukkan jumlah tunai')
     const payload = {
       items: cart.map(l => l.productId ? ({ productId: l.productId, quantity: l.qty, price: l.price }) : ({ name: l.name, quantity: l.qty, price: l.price })),
@@ -181,6 +200,28 @@ export default function KasirPage() {
       setCart([])
       setPaidAmount('')
       setReceipt(json)
+
+      // Print immediately if forced by caller (button) or if client-side auto-print is enabled.
+      // Note: if server-side auto-print is also enabled, this may cause duplicate
+      // print attempts. Disable one of the mechanisms if you only want a single print.
+      if ((opts?.forcePrint) || (autoPrintEnabled && json?.id)) {
+        (async () => {
+          try {
+            const pres = await fetch(`/api/print/transaction/${json.id}`, { method: 'POST' })
+            const pj = await pres.json().catch(() => ({}))
+            if (!pres.ok) {
+              console.warn('Auto-print (client) failed', pj)
+              // If forced print fails, show an error so cashier can retry manually
+              toast.error('Gagal mengirim perintah cetak otomatis')
+            } else {
+              toast.success('Perintah cetak otomatis dikirim')
+            }
+          } catch (err) {
+            console.error('Auto-print (client) error', err)
+            toast.error('Gagal menghubungi server cetak otomatis')
+          }
+        })()
+      }
 
       // keep highlight briefly then refresh real data
       setTimeout(() => setHighlightedIds([]), 1200)

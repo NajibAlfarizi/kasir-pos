@@ -10,7 +10,9 @@ export default function BrandSelect({ value, onChange, categoryId }: { value?: n
     ;(async () => {
       const res = await fetch('/api/brand')
       const data = await res.json()
-      if (mounted) setBrands(data)
+      // API returns either an array or an object { data: [] } depending on query params
+      const items = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : [])
+      if (mounted) setBrands(items)
     })()
     return () => { mounted = false }
   }, [])
