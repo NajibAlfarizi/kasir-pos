@@ -8,7 +8,8 @@ import { Prisma } from '@prisma/client'
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url)
-    const q = (url.searchParams.get('q') ?? '').trim()
+  const q = (url.searchParams.get('q') ?? '').trim()
+  const catRaw = url.searchParams.get('categoryId')
     const pageRaw = Number(url.searchParams.get('page') || '1')
     const perPageParam = url.searchParams.get('perPage')
     const perPageRaw = perPageParam === null ? null : Number(perPageParam)
@@ -22,6 +23,15 @@ export async function GET(req: Request) {
         { name: { contains: q } },
         { category: { is: { name: { contains: q } } } },
       ]
+    }
+
+    // support filtering by category id (exact match)
+    if (catRaw !== null && catRaw !== '') {
+      const parsedCat = Number(catRaw)
+      if (Number.isInteger(parsedCat)) {
+        // exact match on FK
+        ;(where as unknown as { categoryId?: number }).categoryId = parsedCat
+      }
     }
 
     const total = await db.brand.count({ where })
