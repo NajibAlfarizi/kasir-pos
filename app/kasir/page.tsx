@@ -27,7 +27,7 @@ export default function KasirPage() {
   const [loading, setLoading] = React.useState(false)
   const [products, setProducts] = React.useState<Product[]>([])
   const [categories, setCategories] = React.useState<Category[]>([])
-  const [brands, setBrands] = React.useState<{ id: number; name: string }[]>([])
+  const [brands, setBrands] = React.useState<{ id: number; name: string; category?: { id: number; name: string } | null }[]>([])
   const [catFilter, setCatFilter] = React.useState('')
   const [brandFilter, setBrandFilter] = React.useState('')
   const [selectedCategory, setSelectedCategory] = React.useState<number | ''>('')
@@ -267,7 +267,7 @@ export default function KasirPage() {
                           <input value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} placeholder="Cari brand..." className="w-full border rounded px-2 py-1 text-sm" />
                         </div>
                         <div className="max-h-56 overflow-auto">
-                          {brands.filter(b => b.name.toLowerCase().includes(brandFilter.toLowerCase())).map(b => (
+                          {brands.filter(b => (selectedCategory === '' || b.category?.id === selectedCategory) && b.name.toLowerCase().includes(brandFilter.toLowerCase())).map(b => (
                             <DropdownMenuItem key={b.id} onSelect={() => { setSelectedBrand(b.id); setBrandFilter('') }}>
                               <div className="flex items-center justify-between w-full">
                                 <span>{b.name}</span>

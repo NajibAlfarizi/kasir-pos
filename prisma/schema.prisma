@@ -23,6 +23,7 @@ model Category {
   name        String   @unique
   description String?
   products    Product[]
+  brands      Brand[]
   createdAt   DateTime @default(now())
 }
 
@@ -43,6 +44,8 @@ model Product {
 model Brand {
   id        Int       @id @default(autoincrement())
   name      String    @unique
+  categoryId Int?
+  category   Category? @relation(fields: [categoryId], references: [id])
   products  Product[]
   createdAt DateTime  @default(now())
 }

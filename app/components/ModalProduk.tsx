@@ -199,7 +199,7 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
               </div>
               <div>
                 <div className="text-sm mb-1">Brand</div>
-                <BrandSelect value={brandId ?? undefined} onChange={(v: number) => setBrandId(v)} />
+                <BrandSelect value={brandId ?? undefined} onChange={(v: number) => setBrandId(v)} categoryId={categoryId ?? null} />
               </div>
             </div>
           </div>
