@@ -20,6 +20,8 @@ export default function KasirPage() {
   const [receipt, setReceipt] = React.useState<Receipt | null>(null)
   const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(false)
   const [showCameraScanner, setShowCameraScanner] = React.useState(false)
+  const [manualName, setManualName] = React.useState('')
+  const [manualPrice, setManualPrice] = React.useState<string>('')
   const barcodeInputRef = React.useRef<HTMLInputElement>(null)
 
   const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' })
@@ -180,6 +182,18 @@ export default function KasirPage() {
 
   const removeLine = (lineId: string) => setCart(c => c.filter(l => l.id !== lineId))
 
+  const addManualToCart = () => {
+    const name = manualName.trim()
+    const price = Number(manualPrice)
+    if (!name) return toast.error('Nama produk wajib diisi')
+    if (!Number.isInteger(price) || price < 0) return toast.error('Harga harus bilangan bulat >= 0')
+    const line: CartLine = { id: `m-${Date.now()}`, name, qty: 1, price }
+    setCart(c => [...c, line])
+    setManualName('')
+    setManualPrice('')
+    toast.success('Produk manual ditambahkan')
+  }
+
   // Auto-focus to barcode input on mount
   React.useEffect(() => {
     if (barcodeInputRef.current) {
@@ -337,6 +351,51 @@ export default function KasirPage() {
       {/* Main Content: Cart Table + Payment */}
       <main className="flex-1 overflow-hidden px-6 py-4">
         <div className="h-full flex flex-col gap-4">
+          {/* Manual Product Input */}
+          <div className="bg-white rounded-lg border p-4">
+            <h3 className="font-semibold text-slate-900 mb-3">Tambah Produk Manual</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Input
+                placeholder="Nama produk..."
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addManualToCart()
+                  }
+                }}
+              />
+              <Input
+                type="number"
+                placeholder="Harga (IDR)..."
+                value={manualPrice}
+                onChange={(e) => setManualPrice(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addManualToCart()
+                  }
+                }}
+              />
+              <div className="flex gap-2">
+                <Button onClick={addManualToCart} className="flex-1 bg-sky-600 hover:bg-sky-700">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Tambah
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => { setManualName(''); setManualPrice('') }}
+                  disabled={!manualName && !manualPrice}
+                >
+                  Batal
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Cart Table */}
           <div className="flex-1 bg-white rounded-lg border overflow-hidden flex flex-col">
             <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
