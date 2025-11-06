@@ -45,6 +45,7 @@ export async function GET(req: Request) {
     if (q) {
       where.OR = [
         { name: { contains: q } },
+        { barcode: { contains: q } },
         { category: { is: { name: { contains: q } } } },
         { brand: { is: { name: { contains: q } } } },
       ]
@@ -179,7 +180,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-  const { name, price, stock, categoryId, cost, brandId } = body
+  const { name, price, stock, categoryId, cost, brandId, barcode } = body
     // stricter validation
     const trimmedName = typeof name === 'string' ? name.trim() : ''
     if (!trimmedName) return new Response(JSON.stringify({ error: 'Name is required' }), { status: 400 })
@@ -188,6 +189,13 @@ export async function POST(req: Request) {
     if (typeof stock !== 'number' || !Number.isInteger(stock) || stock < 0) return new Response(JSON.stringify({ error: 'Stock must be a non-negative integer' }), { status: 400 })
     if (cost !== undefined) {
       if (typeof cost !== 'number' || !Number.isInteger(cost) || cost < 0) return new Response(JSON.stringify({ error: 'Cost must be a non-negative integer' }), { status: 400 })
+    }
+
+    const trimmedBarcode = barcode && typeof barcode === 'string' ? barcode.trim() : null
+    if (trimmedBarcode && trimmedBarcode.length > 0) {
+      // Check for duplicate barcode
+      const existing = await db.product.findUnique({ where: { barcode: trimmedBarcode } })
+      if (existing) return new Response(JSON.stringify({ error: 'Barcode sudah digunakan oleh produk lain' }), { status: 409 })
     }
 
     let catId: number | null = null
@@ -212,6 +220,7 @@ export async function POST(req: Request) {
   const payload: any = { name: trimmedName, price, cost: cost ?? 0, stock }
   if (catId !== null) payload.categoryId = catId
   if (brId !== null) payload.brandId = brId
+  if (trimmedBarcode && trimmedBarcode.length > 0) payload.barcode = trimmedBarcode
   const created = await db.product.create({ data: payload })
     return new Response(JSON.stringify(created), { status: 201 })
   } catch (err) {
@@ -228,7 +237,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json()
-    const { id, name, price, stock, categoryId, cost, brandId } = body
+    const { id, name, price, stock, categoryId, cost, brandId, barcode } = body
     if (id === undefined || id === null) return new Response(JSON.stringify({ error: 'id is required' }), { status: 400 })
     const parsedId = Number(id)
     if (!Number.isInteger(parsedId)) return new Response(JSON.stringify({ error: 'id must be an integer' }), { status: 400 })
@@ -238,6 +247,13 @@ export async function PUT(req: Request) {
     if (!trimmedName) return new Response(JSON.stringify({ error: 'Name is required' }), { status: 400 })
     if (typeof price !== 'number' || !Number.isInteger(price) || price < 0) return new Response(JSON.stringify({ error: 'Price must be a non-negative integer' }), { status: 400 })
     if (typeof stock !== 'number' || !Number.isInteger(stock) || stock < 0) return new Response(JSON.stringify({ error: 'Stock must be a non-negative integer' }), { status: 400 })
+
+    const trimmedBarcode = barcode && typeof barcode === 'string' ? barcode.trim() : null
+    if (trimmedBarcode && trimmedBarcode.length > 0) {
+      // Check for duplicate barcode (excluding current product)
+      const existing = await db.product.findUnique({ where: { barcode: trimmedBarcode } })
+      if (existing && existing.id !== parsedId) return new Response(JSON.stringify({ error: 'Barcode sudah digunakan oleh produk lain' }), { status: 409 })
+    }
 
     let catId: number | null = null
     let brId: number | null = null
@@ -261,6 +277,7 @@ export async function PUT(req: Request) {
   if (catId !== null) updateData.categoryId = catId
   if (brId !== null) updateData.brandId = brId
   if (cost !== undefined) updateData.cost = cost
+  if (trimmedBarcode !== null) updateData.barcode = trimmedBarcode.length > 0 ? trimmedBarcode : null
   const updated = await db.product.update({ where: { id: parsedId }, data: updateData })
     return new Response(JSON.stringify(updated), { status: 200 })
   } catch (err) {

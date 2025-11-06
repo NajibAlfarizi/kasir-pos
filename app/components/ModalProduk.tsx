@@ -1,16 +1,16 @@
 "use client"
 
 import * as React from "react"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
+import BarcodeCameraScanner from './BarcodeCameraScanner'
 import { toast } from "sonner"
 
 type Props = {
@@ -22,6 +22,7 @@ type Props = {
 
 export default function ModalProduk({ open, onClose, onSaved, editing }: Props) {
   const [name, setName] = React.useState("")
+  const [barcode, setBarcode] = React.useState("")
   const [price, setPrice] = React.useState("")
   const [cost, setCost] = React.useState("")
   const [stock, setStock] = React.useState("")
@@ -34,11 +35,13 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
   const [brandFilter, setBrandFilter] = React.useState('')
   const [error, setError] = React.useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({})
+  const [showCameraScanner, setShowCameraScanner] = React.useState(false)
   const nameRef = React.useRef<HTMLInputElement | null>(null)
 
   React.useEffect(() => {
     if (editing) {
       setName(editing.name || "")
+      setBarcode((editing as unknown as { barcode?: string }).barcode || "")
       setPrice(String(editing.price ?? ""))
       setCost(String(editing.cost ?? ""))
       setStock(String(editing.stock ?? ""))
@@ -46,6 +49,7 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
       setBrandId(editing.brand?.id ?? null)
     } else {
       setName("")
+      setBarcode("")
       setPrice("")
       setCost("")
       setStock("")
@@ -112,6 +116,12 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
       const n = Number(v)
       if (!Number.isInteger(n) || n < 0) errs.stock = 'Stok harus bilangan bulat >= 0'
     }
+    if (k === 'category') {
+      if (!v || v === '') errs.category = 'Kategori wajib dipilih'
+    }
+    if (k === 'brand') {
+      if (!v || v === '') errs.brand = 'Brand wajib dipilih'
+    }
     setFieldErrors(prev => ({ ...prev, ...errs }))
     return Object.keys(errs).length === 0
   }
@@ -121,7 +131,9 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
     const pe = validateField('price', price)
     const ce = validateField('cost', cost)
     const se = validateField('stock', stock)
-    return ne && pe && ce && se
+    const cate = validateField('category', categoryId ? String(categoryId) : '')
+    const brande = validateField('brand', brandId ? String(brandId) : '')
+    return ne && pe && ce && se && cate && brande
   }
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -141,7 +153,8 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
     setSaving(true)
     try {
     const method = editing ? 'PUT' : 'POST'
-    const body: { name: string; price: number; cost?: number; stock: number; categoryId?: number; brandId?: number; id?: number } = { name: trimmed, price: p, cost: c, stock: s }
+    const body: { name: string; barcode?: string; price: number; cost?: number; stock: number; categoryId?: number; brandId?: number; id?: number } = { name: trimmed, price: p, cost: c, stock: s }
+      if (barcode.trim()) body.barcode = barcode.trim()
       if (categoryId) body.categoryId = categoryId
       if (brandId) body.brandId = brandId
       if (editing) body.id = editing.id
@@ -168,16 +181,49 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={(v) => (v ? null : onClose())}>
-      <SheetContent side="right">
-        <SheetHeader>
+      <SheetContent side="right" className="flex flex-col h-full p-0">
+        <SheetHeader className="px-6 py-4 border-b">
           <SheetTitle className="text-lg">{editing ? 'Edit Produk' : 'Buat Produk'}</SheetTitle>
         </SheetHeader>
-        <form onSubmit={onSubmit} className="p-4">
+        <form onSubmit={onSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="mb-4">
             <label htmlFor="product-name" className="block text-sm font-medium mb-1">Nama <span className="text-destructive">*</span></label>
             <Input id="product-name" ref={nameRef} placeholder="Masukkan nama produk" value={name} onChange={(e) => { setName(e.target.value); setFieldErrors(prev => ({ ...prev, name: '' })) }} aria-invalid={!!fieldErrors.name} aria-describedby={fieldErrors.name ? 'name-error' : undefined} />
             {fieldErrors.name ? <div id="name-error" className="text-xs text-destructive mt-1">{fieldErrors.name}</div> : null}
+          </div>
+
+          <div className="mb-4">
+            <label htmlFor="product-barcode" className="block text-sm font-medium mb-1">Barcode <span className="text-xs text-muted-foreground">(opsional)</span></label>
+            <div className="flex items-center gap-2">
+              <Input 
+                id="product-barcode" 
+                placeholder="Scan atau ketik barcode" 
+                value={barcode} 
+                onChange={(e) => setBarcode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                  }
+                }}
+                className="flex-1" 
+              />
+              <Button 
+                type="button"
+                onClick={() => setShowCameraScanner(true)} 
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Scan
+              </Button>
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Scan barcode dengan scanner, camera, atau ketik manual</div>
           </div>
 
           <div className="mb-4 grid grid-cols-1 gap-3">
@@ -237,10 +283,10 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
           <div className="mb-3">
             <div className="flex flex-col sm:flex-row items-start gap-3">
               <div>
-                <div className="text-sm mb-1">Kategori</div>
+                <div className="text-sm mb-1">Kategori <span className="text-destructive">*</span></div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md w-44 text-left">
+                    <button className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md w-44 text-left ${fieldErrors.category ? 'border-destructive' : ''}`}>
                       <span className="font-medium">{categoryId === null ? 'Pilih Kategori' : (categories.find(c => c.id === categoryId)?.name ?? 'Kategori')}</span>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -259,7 +305,7 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
                     </div>
                     <div className="max-h-56 overflow-auto">
                       {categories.filter(c => c.name.toLowerCase().includes(catFilter.toLowerCase())).map(cat => (
-                        <DropdownMenuItem key={cat.id} onSelect={() => { setCategoryId(cat.id); setCatFilter('') }}>
+                        <DropdownMenuItem key={cat.id} onSelect={() => { setCategoryId(cat.id); setCatFilter(''); setFieldErrors(prev => ({ ...prev, category: '' })) }}>
                           <div className="flex items-center justify-between w-full">
                             <span>{cat.name}</span>
                             {categoryId === cat.id ? <span className="text-sky-600">✓</span> : null}
@@ -272,13 +318,14 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {fieldErrors.category ? <div className="text-xs text-destructive mt-1">{fieldErrors.category}</div> : null}
               </div>
 
               <div>
-                <div className="text-sm mb-1">Brand</div>
+                <div className="text-sm mb-1">Brand <span className="text-destructive">*</span></div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md w-40 text-left">
+                    <button className={`inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md w-40 text-left ${fieldErrors.brand ? 'border-destructive' : ''}`}>
                       <span className="font-medium">{brandId === null ? 'Pilih Brand' : (brands.find(b => b.id === brandId)?.name ?? 'Brand')}</span>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -292,7 +339,7 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
                     </div>
                     <div className="max-h-56 overflow-auto">
                       {brands.filter(b => (!categoryId || b.category?.id === categoryId) && b.name.toLowerCase().includes(brandFilter.toLowerCase())).map(b => (
-                        <DropdownMenuItem key={b.id} onSelect={() => { setBrandId(b.id); setBrandFilter('') }}>
+                        <DropdownMenuItem key={b.id} onSelect={() => { setBrandId(b.id); setBrandFilter(''); setFieldErrors(prev => ({ ...prev, brand: '' })) }}>
                           <div className="flex items-center justify-between w-full">
                             <span>{b.name}</span>
                             {brandId === b.id ? <span className="text-sky-600">✓</span> : null}
@@ -305,20 +352,37 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {fieldErrors.brand ? <div className="text-xs text-destructive mt-1">{fieldErrors.brand}</div> : null}
               </div>
             </div>
           </div>
-          {error && <div className="text-sm text-destructive mb-2">{error}</div>}
-          <Separator />
-          <SheetFooter className="flex flex-col sm:flex-row justify-between items-center gap-3">
-            <div className="text-sm text-muted-foreground">{error ? <span className="text-destructive">{error}</span> : <span className="text-muted-foreground">Semua harga &amp; stok harus bilangan bulat &gt;= 0</span>}</div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={onClose}>Batal</Button>
-              <Button type="submit" disabled={saving} className="bg-sky-600 text-white hover:bg-sky-700">{saving ? 'Menyimpan...' : 'Simpan'}</Button>
+          </div>
+          
+          <div className="border-t px-6 py-4 bg-white">
+            {error && <div className="text-sm text-destructive mb-3">{error}</div>}
+            <div className="flex flex-col sm:flex-row justify-end items-center gap-3">
+              <Button type="button" variant="ghost" onClick={onClose}>Batal</Button>
+              <Button type="submit" disabled={saving} className="bg-sky-600 text-white hover:bg-sky-700 w-full sm:w-auto">
+                {saving ? 'Menyimpan...' : 'Simpan'}
+              </Button>
             </div>
-          </SheetFooter>
+          </div>
         </form>
       </SheetContent>
     </Sheet>
+    
+    {/* Camera Scanner Modal - Outside Sheet to prevent auto-close */}
+    {showCameraScanner && (
+      <BarcodeCameraScanner
+        open={showCameraScanner}
+        onClose={() => setShowCameraScanner(false)}
+        onScanned={(detectedBarcode) => {
+          setBarcode(detectedBarcode)
+          setShowCameraScanner(false)
+          toast.success('Barcode berhasil discan')
+        }}
+      />
+    )}
+  </>
   )
 }

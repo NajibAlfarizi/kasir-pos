@@ -3,70 +3,26 @@
 import * as React from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from '@/components/ui/dropdown-menu'
-import { Spinner } from '@/components/ui/spinner'
-// icons
+import BarcodeCameraScanner from '../components/BarcodeCameraScanner'
 import { toast } from 'sonner'
 // Separator and Table components removed from this redesigned page
 // icons
 
-type Product = { id: number; name: string; price: number; stock: number }
-type Category = { id: number; name: string }
+type Product = { id: number; name: string; price: number; stock: number; barcode?: string }
 type CartLine = { id: string; product?: Product; productId?: number; name?: string; qty: number; price: number }
 type ReceiptItem = { id: number; product?: Product | null; quantity: number; subtotal: number }
 type Receipt = { id: number; total: number; paid: number; change: number; createdAt: string; items: ReceiptItem[] }
 
 export default function KasirPage() {
-  const [query, setQuery] = React.useState('')
-  const [debouncedQuery, setDebouncedQuery] = React.useState('')
-  const [loading, setLoading] = React.useState(false)
-  const [products, setProducts] = React.useState<Product[]>([])
-  const [categories, setCategories] = React.useState<Category[]>([])
-  const [brands, setBrands] = React.useState<{ id: number; name: string; category?: { id: number; name: string } | null }[]>([])
-  const [catFilter, setCatFilter] = React.useState('')
-  const [brandFilter, setBrandFilter] = React.useState('')
-  const [selectedCategory, setSelectedCategory] = React.useState<number | ''>('')
-  const [selectedBrand, setSelectedBrand] = React.useState<number | ''>('')
-  const [highlightedIds, setHighlightedIds] = React.useState<number[]>([])
+  const [barcode, setBarcode] = React.useState('')
   const [cart, setCart] = React.useState<CartLine[]>([])
-  const [manualName, setManualName] = React.useState('')
-  const [manualPrice, setManualPrice] = React.useState<string>('')
   const [paidAmount, setPaidAmount] = React.useState<number | ''>('')
   const [receipt, setReceipt] = React.useState<Receipt | null>(null)
   const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(false)
+  const [showCameraScanner, setShowCameraScanner] = React.useState(false)
+  const barcodeInputRef = React.useRef<HTMLInputElement>(null)
 
   const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' })
-
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 300)
-    return () => clearTimeout(t)
-  }, [query])
-
-  const fetchProducts = React.useCallback(async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (debouncedQuery) params.set('q', debouncedQuery)
-      // show all products (no per-page limit)
-      if (selectedCategory !== '') params.set('categoryId', String(selectedCategory))
-      if (selectedBrand !== '') params.set('brandId', String(selectedBrand))
-      const res = await fetch(`/api/produk?${params.toString()}`)
-      const json = await res.json()
-      setProducts(json.data || [])
-    } catch (err) {
-      console.error(err)
-      toast.error('Gagal memuat produk')
-    } finally {
-      setLoading(false)
-    }
-  }, [debouncedQuery, selectedCategory, selectedBrand])
-
-  React.useEffect(() => { fetchProducts() }, [fetchProducts])
 
   // load settings to determine if client-side auto-print should be triggered
   React.useEffect(() => {
@@ -86,55 +42,131 @@ export default function KasirPage() {
     return () => { mounted = false }
   }, [])
 
-  // load categories for filter + quick chips
-  React.useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const res = await fetch('/api/kategori')
-        if (!res.ok) return
-  const json = await res.json()
-  if (!mounted) return
-  // API may return either an array or an object like { data: [] }
-  const data = Array.isArray(json) ? json : (json?.data ?? [])
-  setCategories(data)
-      } catch (err) {
-        console.error('load categories', err)
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
-
-  // load brands for filter
-  React.useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        const res = await fetch('/api/brand')
-        if (!res.ok) return
-        const json = await res.json()
-        if (!mounted) return
-        const data = Array.isArray(json) ? json : (json?.data ?? [])
-        setBrands(data)
-      } catch (err) {
-        console.error('load brands', err)
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
-
-  const addToCart = (p: Product) => {
-    setCart((c) => {
-      const idx = c.findIndex(x => x.productId === p.id)
+  const addToCart = React.useCallback((p: Product) => {
+    console.log('🛒 addToCart function called')
+    console.log('🛒 Product to add:', p)
+    
+    setCart((prevCart) => {
+      console.log('🛒 Current cart before update:', prevCart)
+      
+      const idx = prevCart.findIndex(x => x.productId === p.id)
+      console.log('🛒 Product index in cart:', idx)
+      
       if (idx !== -1) {
         // increment qty but don't exceed stock
-        const cloned = [...c]
-        const next = Math.min(cloned[idx].qty + 1, p.stock)
+        console.log('🛒 Product already in cart, incrementing qty')
+        const cloned = [...prevCart]
+        const currentQty = cloned[idx].qty
+        const next = Math.min(currentQty + 1, p.stock)
+        console.log(`🛒 Qty: ${currentQty} → ${next} (max: ${p.stock})`)
         cloned[idx] = { ...cloned[idx], qty: next }
+        console.log('🛒 Updated cart:', cloned)
         return cloned
       }
-      return [...c, { id: `p-${p.id}`, product: p, productId: p.id, qty: 1, price: p.price }]
+      
+      console.log('🛒 Product not in cart, adding new item')
+      const newItem = { id: `p-${p.id}`, product: p, productId: p.id, qty: 1, price: p.price }
+      console.log('🛒 New cart item:', newItem)
+      const newCart = [...prevCart, newItem]
+      console.log('🛒 New cart:', newCart)
+      return newCart
     })
+    
+    console.log('🛒 addToCart function completed')
+  }, [])
+
+  // Barcode scanner: when user enters barcode and presses Enter, search for product and add to cart
+  const handleBarcodeSubmit = React.useCallback(async (code: string) => {
+    const trimmed = code.trim()
+    console.log('=====================================')
+    console.log('🔍 STEP 1: Starting barcode scan')
+    console.log('📋 Barcode input:', code)
+    console.log('📋 Trimmed barcode:', trimmed)
+    console.log('📋 Barcode length:', trimmed.length)
+    
+    if (!trimmed) {
+      console.log('❌ Barcode is empty, stopping')
+      return
+    }
+    
+    try {
+      console.log('🌐 STEP 2: Fetching from API...')
+      const url = `/api/produk?q=${encodeURIComponent(trimmed)}`
+      console.log('🌐 API URL:', url)
+      
+      const res = await fetch(url)
+      console.log('📡 STEP 3: Response status:', res.status)
+      
+      if (!res.ok) {
+        console.log('❌ Response not OK')
+        toast.error('Gagal mencari produk')
+        return
+      }
+      
+      const json = await res.json()
+      console.log('📦 STEP 4: Raw API Response:', json)
+      console.log('📦 Response type:', Array.isArray(json) ? 'Array' : 'Object')
+      
+      const data = Array.isArray(json) ? json : (json?.data ?? [])
+      console.log('📋 STEP 5: Parsed data array:', data)
+      console.log('📋 Number of products found:', data.length)
+      
+      // Log all products with their barcodes
+      data.forEach((p: Product, index: number) => {
+        console.log(`   Product ${index + 1}:`, {
+          id: p.id,
+          name: p.name,
+          barcode: p.barcode,
+          price: p.price,
+          stock: p.stock
+        })
+      })
+      
+      console.log('🔎 STEP 6: Looking for exact match...')
+      console.log('🔎 Searching for barcode:', trimmed)
+      
+      // Find exact barcode match
+      const match = data.find((p: Product) => {
+        const matches = p.barcode === trimmed
+        console.log(`   Comparing: "${p.barcode}" === "${trimmed}" = ${matches}`)
+        return matches
+      })
+      
+      console.log('✅ STEP 7: Match result:', match)
+      
+      if (match) {
+        console.log('🎉 Product found!')
+        console.log('📦 Product details:', match)
+        console.log('📊 Stock:', match.stock)
+        
+        if (match.stock > 0) {
+          console.log('✅ Stock available, adding to cart...')
+          addToCart(match)
+          toast.success(`${match.name} ditambahkan ke keranjang`)
+          setBarcode('') // clear after adding
+          console.log('✅ Product added to cart successfully')
+        } else {
+          console.log('❌ Stock is 0')
+          toast.error(`${match.name} stok habis`)
+        }
+      } else {
+        console.log('❌ No exact match found')
+        console.log('❌ Searched barcode:', trimmed)
+        console.log('❌ Available barcodes:', data.map((p: Product) => p.barcode))
+        toast.error(`Produk dengan barcode "${trimmed}" tidak ditemukan`)
+      }
+      console.log('=====================================')
+    } catch (err) {
+      console.error('❌ ERROR in barcode search:', err)
+      toast.error('Gagal mencari produk')
+    }
+  }, [addToCart])
+
+  const handleBarcodeKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleBarcodeSubmit(barcode)
+    }
   }
 
   const updateQty = (lineId: string, qty: number) => {
@@ -148,16 +180,50 @@ export default function KasirPage() {
 
   const removeLine = (lineId: string) => setCart(c => c.filter(l => l.id !== lineId))
 
-  const addManualToCart = () => {
-    const name = manualName.trim()
-    const price = Number(manualPrice)
-    if (!name) return toast.error('Nama manual wajib diisi')
-    if (!Number.isInteger(price) || price < 0) return toast.error('Harga harus bilangan bulat >= 0')
-    const line: CartLine = { id: `m-${Date.now()}`, name, qty: 1, price }
-    setCart(c => [...c, line])
-    setManualName('')
-    setManualPrice('')
-  }
+  // Auto-focus to barcode input on mount
+  React.useEffect(() => {
+    if (barcodeInputRef.current) {
+      barcodeInputRef.current.focus()
+    }
+  }, [])
+
+  // Global keyboard listener for barcode scanner (physical scanner)
+  React.useEffect(() => {
+    let buffer = ''
+    let timeout: NodeJS.Timeout | null = null
+
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Ignore if user is typing in payment input
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' && target !== barcodeInputRef.current) {
+        return
+      }
+
+      // Barcode scanner sends characters quickly followed by Enter
+      if (e.key === 'Enter') {
+        if (buffer.length > 0) {
+          console.log('🔍 Physical barcode scanner detected:', buffer)
+          handleBarcodeSubmit(buffer)
+          buffer = ''
+        }
+      } else if (e.key.length === 1) {
+        // Regular character
+        buffer += e.key
+        
+        // Clear buffer after 100ms of no input (scanner types very fast)
+        if (timeout) clearTimeout(timeout)
+        timeout = setTimeout(() => {
+          buffer = ''
+        }, 100)
+      }
+    }
+
+    window.addEventListener('keypress', handleKeyPress)
+    return () => {
+      window.removeEventListener('keypress', handleKeyPress)
+      if (timeout) clearTimeout(timeout)
+    }
+  }, [handleBarcodeSubmit])
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0)
 
@@ -174,24 +240,10 @@ export default function KasirPage() {
       paid: paidAmount,
     }
     try {
-      // Optimistic UI: decrement stock locally for product-based items immediately
-      type ItemPayload = { productId?: number; quantity: number; price?: number }
-      const items: ItemPayload[] = payload.items as ItemPayload[]
-      const affectedIds: number[] = items.filter(i => i.productId).map(i => i.productId!)
-      setProducts(prev => prev.map(p => {
-        if (!affectedIds.includes(p.id)) return p
-        const qty = items.find(it => it.productId === p.id)?.quantity || 0
-        return { ...p, stock: Math.max(0, p.stock - qty) }
-      }))
-      setHighlightedIds(affectedIds)
-
       const res = await fetch('/api/transaksi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const json = await res.json()
       if (!res.ok) {
         toast.error(json?.error || 'Gagal melakukan transaksi')
-        // rollback optimistic changes by re-fetching
-        await fetchProducts()
-        setHighlightedIds([])
         return
       }
 
@@ -202,236 +254,252 @@ export default function KasirPage() {
       setReceipt(json)
 
       // Print immediately if forced by caller (button) or if client-side auto-print is enabled.
-      // Note: if server-side auto-print is also enabled, this may cause duplicate
-      // print attempts. Disable one of the mechanisms if you only want a single print.
+      console.log('🖨️ Auto-print check:', {
+        forcePrint: opts?.forcePrint,
+        autoPrintEnabled,
+        transactionId: json?.id,
+        shouldPrint: (opts?.forcePrint) || (autoPrintEnabled && json?.id)
+      })
+      
       if ((opts?.forcePrint) || (autoPrintEnabled && json?.id)) {
-        (async () => {
+        console.log('🖨️ Initiating auto-print...')
+        ;(async () => {
           try {
-            const pres = await fetch(`/api/print/transaction/${json.id}`, { method: 'POST' })
+            const printUrl = `/api/print/transaction/${json.id}`
+            console.log('🖨️ Calling print API:', printUrl)
+            const pres = await fetch(printUrl, { method: 'POST' })
             const pj = await pres.json().catch(() => ({}))
+            console.log('🖨️ Print API response:', pres.status, pj)
             if (!pres.ok) {
               console.warn('Auto-print (client) failed', pj)
-              // If forced print fails, show an error so cashier can retry manually
               toast.error('Gagal mengirim perintah cetak otomatis')
             } else {
-              toast.success('Perintah cetak otomatis dikirim')
+              console.log('✅ Print command sent successfully')
+              toast.success('Struk sedang dicetak...')
             }
           } catch (err) {
             console.error('Auto-print (client) error', err)
             toast.error('Gagal menghubungi server cetak otomatis')
           }
         })()
+      } else {
+        console.log('⏭️ Auto-print skipped (not enabled or forced)')
       }
 
-      // keep highlight briefly then refresh real data
-      setTimeout(() => setHighlightedIds([]), 1200)
-      try { await fetchProducts() } catch { /* ignore */ }
     } catch (err) {
       console.error(err)
       toast.error('Gagal melakukan transaksi')
-      try { await fetchProducts() } catch { /* ignore */ }
-      setHighlightedIds([])
     }
   }
 
   return (
-    <div className="space-y-4">
-      <header className="sticky top-4 z-40 bg-white/80 backdrop-blur-sm rounded-md px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold text-slate-900">KasirQu</h1>
-          <p className="text-sm text-slate-500">Cepat. Bersih. Aman. Tambahkan produk lalu lakukan pembayaran.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white shadow-sm rounded-lg px-3 py-2">
-            <Input placeholder="Cari produk..." value={query} onChange={(e) => setQuery(e.target.value)} className="w-56 md:w-80 bg-transparent" />
-            {loading && <Spinner />}
+    <div className="h-screen flex flex-col overflow-hidden">
+      {/* Header with scan and search */}
+      <header className="bg-white border-b px-6 py-4 flex-none">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Kasir</h1>
+            <p className="text-sm text-slate-500">Scan barcode atau cari produk</p>
           </div>
-          <Button onClick={() => { setCart([]); toast('Keranjang dikosongkan') }} className="bg-red-50 text-red-700 hover:bg-red-100">Kosongkan</Button>
+
+          <div className="flex items-center gap-3">
+            {/* Barcode Scanner Input */}
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              <Input 
+                ref={barcodeInputRef}
+                placeholder="Scan barcode..." 
+                value={barcode} 
+                onChange={(e) => setBarcode(e.target.value)} 
+                onKeyDown={handleBarcodeKeyDown}
+                className="w-48 bg-transparent border-0 focus-visible:ring-0 px-0" 
+              />
+            </div>
+
+            {/* Camera Scan Button */}
+            <Button 
+              onClick={() => setShowCameraScanner(true)} 
+              className="bg-sky-600 text-white hover:bg-sky-700"
+              size="sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              📷 Scan
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="grid grid-cols-12 gap-6">
-  {/* Products column */}
-  <section className="col-span-12 lg:col-span-7">
-          <div className="bg-gradient-to-b from-white to-slate-50 rounded-lg p-4 shadow">
-            {/* Filters: category select + quick chips */}
-            <div className="flex items-center justify-between mb-4 gap-3">
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="inline-flex items-center gap-2 px-4 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md">
-                      <span className="font-medium">{selectedCategory === '' ? 'Semua Kategori' : (categories.find(c => c.id === selectedCategory)?.name ?? 'Kategori')}</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                  </DropdownMenuTrigger>
-
-                  <DropdownMenuContent className="max-w-xs">
-                    <div className="px-2 py-1">
-                      <input
-                        value={catFilter}
-                        onChange={(e) => setCatFilter(e.target.value)}
-                        placeholder="Cari kategori..."
-                        className="w-full border rounded px-2 py-1 text-sm"
-                      />
-                    </div>
-                    <div className="max-h-56 overflow-auto">
-                      {categories.filter(c => c.name.toLowerCase().includes(catFilter.toLowerCase())).map(cat => (
-                        <DropdownMenuItem key={cat.id} onSelect={() => { setSelectedCategory(cat.id); setCatFilter('') }}>
-                          <div className="flex items-center justify-between w-full">
-                            <span>{cat.name}</span>
-                            {selectedCategory === cat.id ? <span className="text-sky-600">✓</span> : null}
+      {/* Main Content: Cart Table + Payment */}
+      <main className="flex-1 overflow-hidden px-6 py-4">
+        <div className="h-full flex flex-col gap-4">
+          {/* Cart Table */}
+          <div className="flex-1 bg-white rounded-lg border overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
+              <h2 className="font-semibold text-slate-900">Keranjang Belanja</h2>
+              <span className="text-sm text-slate-500">{cart.length} item</span>
+            </div>
+            
+            <div className="flex-1 overflow-auto">
+              {cart.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-slate-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <p className="text-slate-500 text-sm">Keranjang kosong</p>
+                    <p className="text-slate-400 text-xs mt-1">Scan barcode untuk menambahkan produk</p>
+                  </div>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b sticky top-0">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider">Produk</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-600 uppercase tracking-wider w-32">Harga</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-600 uppercase tracking-wider w-40">Qty</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-600 uppercase tracking-wider w-32">Subtotal</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-600 uppercase tracking-wider w-24">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cart.map((line, idx) => (
+                      <tr key={line.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-sky-50/50 transition-colors`}>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">{line.product?.name ?? line.name}</div>
+                          {line.product && (
+                            <div className="text-xs text-slate-500 mt-1">Stok: {line.product.stock}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-700">{fmt.format(line.price)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => updateQty(line.id, line.qty - 1)}
+                              className="h-7 w-7 p-0"
+                            >
+                              -
+                            </Button>
+                            <input 
+                              aria-label={`Qty ${line.product?.name ?? line.name}`} 
+                              value={String(line.qty)} 
+                              onChange={(e) => updateQty(line.id, Number(e.target.value || 1))} 
+                              className="w-16 border text-center rounded px-2 py-1 text-sm"
+                            />
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => updateQty(line.id, line.qty + 1)}
+                              className="h-7 w-7 p-0"
+                            >
+                              +
+                            </Button>
                           </div>
-                        </DropdownMenuItem>
-                      ))}
-                    </div>
-                    <DropdownMenuItem onSelect={() => { setSelectedCategory(''); setCatFilter('') }}>
-                      Semua Kategori
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                  <div className="ml-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="inline-flex items-center gap-2 px-4 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md">
-                          <span className="font-medium">{selectedBrand === '' ? 'Semua Brand' : (brands.find(b => b.id === selectedBrand)?.name ?? 'Brand')}</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                      </DropdownMenuTrigger>
-
-                      <DropdownMenuContent className="max-w-xs">
-                        <div className="px-2 py-1">
-                          <input value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)} placeholder="Cari brand..." className="w-full border rounded px-2 py-1 text-sm" />
-                        </div>
-                        <div className="max-h-56 overflow-auto">
-                          {brands.filter(b => (selectedCategory === '' || b.category?.id === selectedCategory) && b.name.toLowerCase().includes(brandFilter.toLowerCase())).map(b => (
-                            <DropdownMenuItem key={b.id} onSelect={() => { setSelectedBrand(b.id); setBrandFilter('') }}>
-                              <div className="flex items-center justify-between w-full">
-                                <span>{b.name}</span>
-                                {selectedBrand === b.id ? <span className="text-sky-600">✓</span> : null}
-                              </div>
-                            </DropdownMenuItem>
-                          ))}
-                        </div>
-                        <DropdownMenuItem onSelect={() => { setSelectedBrand(''); setBrandFilter('') }}>
-                          Semua Brand
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-              </div>
-            </div>
-
-            {/* Products grid - show all products (no fixed max height) */}
-            <div className="pr-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-3 gap-3">
-                {products.map(p => (
-                  <article
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => p.stock > 0 && addToCart(p)}
-                    onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && p.stock > 0) { e.preventDefault(); addToCart(p) } }}
-                    aria-disabled={p.stock <= 0}
-                    className={`relative rounded-lg border overflow-hidden h-full min-h-[72px] p-2 ${highlightedIds.includes(p.id) ? 'ring-2 ring-amber-300 bg-amber-50' : 'bg-white'} transition-shadow hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-sky-200 ${p.stock > 0 ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'}`}
-                  >
-                    <div className="flex flex-col h-full justify-between">
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-slate-800 leading-tight mb-1" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
-                        {p.stock <= 0 ? (
-                          <div className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 mb-2">Stok Habis</div>
-                        ) : (
-                          <div className="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 mb-2">Stok: {p.stock}</div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold text-emerald-600">{fmt.format(p.price)}</div>
-                        {p.stock <= 0 ? <div className="text-xs text-slate-400">Tidak tersedia</div> : null}
-                      </div>
-                    </div>
-                  </article>
-                ))}
-
-                {products.length === 0 && !loading && (
-                  <div className="col-span-full text-center text-sm text-slate-500">
-                    {selectedCategory === '' ? 'Tidak ada produk' : 'Tidak ada produk dengan kategori ini'}
-                  </div>
-                )}
-              </div>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900">{fmt.format(line.price * line.qty)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => removeLine(line.id)} 
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
-        </section>
 
-        {/* Checkout / Cart column */}
-  <aside className="col-span-12 lg:col-span-5">
-          <div className="sticky top-6 bg-white rounded-lg shadow p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-lg font-semibold text-slate-800">Keranjang</div>
-              <div className="text-sm text-slate-500">{cart.length} item</div>
-            </div>
-
-            <div className="space-y-3 max-h-[60vh] overflow-auto pr-2">
-              {cart.length === 0 && <div className="text-sm text-slate-500">Keranjang kosong — tambahkan produk.</div>}
-              {cart.map(line => (
-                <div key={line.id} className="flex items-center justify-between p-3 rounded-md border bg-white gap-3">
-                  <div className="min-w-0 pr-2 flex-1">
-                    <div className="text-sm font-medium text-slate-800">{line.product?.name ?? line.name}</div>
-                    <div className="text-xs text-slate-500 mt-1">{fmt.format(line.price)}</div>
+          {/* Payment Section */}
+          <div className="flex-none bg-white rounded-lg border">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+              {/* Total Summary */}
+              <div>
+                <h3 className="font-semibold text-slate-900 mb-4">Ringkasan</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Subtotal</span>
+                    <span className="font-medium">{fmt.format(subtotal)}</span>
                   </div>
-
-                  <div className="flex items-center gap-3 flex-none">
-                    <div className="inline-flex items-center gap-2 bg-white border rounded-md px-2 py-1 shadow-sm">
-                      <Button size="sm" variant="outline" onClick={() => updateQty(line.id, line.qty - 1)}>-</Button>
-                      <input aria-label={`Qty ${line.product?.name ?? line.name}`} value={String(line.qty)} onChange={(e) => updateQty(line.id, Number(e.target.value || 1))} className="w-14 min-w-[48px] border text-center rounded px-1 py-0.5 text-sm" />
-                      <Button size="sm" variant="outline" onClick={() => updateQty(line.id, line.qty + 1)}>+</Button>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => removeLine(line.id)} className="text-red-600">Hapus</Button>
+                  <div className="border-t pt-2 flex justify-between">
+                    <span className="font-bold text-lg">Total</span>
+                    <span className="font-bold text-lg text-sky-600">{fmt.format(subtotal)}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Manual add block */}
-            <div className="mt-3 border-t pt-3">
-              <div className="text-sm font-medium mb-2">Produk Manual</div>
-              <input placeholder="Nama produk" value={manualName} onChange={(e) => setManualName(e.target.value)} className="w-full border px-2 py-1 rounded mb-2" />
-              <input placeholder="Harga (IDR)" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} type="number" className="w-full border px-2 py-1 rounded mb-2" />
-              <div className="flex gap-2">
-                <Button onClick={addManualToCart} className="flex-1">Tambah</Button>
-                <Button variant="ghost" onClick={() => { setManualName(''); setManualPrice('') }} className="flex-1">Batal</Button>
               </div>
-            </div>
 
-            <div className="mt-4 border-t pt-4">
-              <div className="flex justify-between text-sm text-slate-600"><div>Subtotal</div><div>{fmt.format(subtotal)}</div></div>
-              <div className="flex justify-between mt-1 font-extrabold text-2xl text-slate-900"><div>Total</div><div>{fmt.format(subtotal)}</div></div>
-
-              <div className="mt-4">
-                <label className="block text-sm mb-2">Tunai</label>
-                <input type="number" aria-label="Tunai" value={paidAmount === '' ? '' : paidAmount} onChange={(e) => setPaidAmount(e.target.value === '' ? '' : Number(e.target.value))} className="w-full border px-3 py-2 rounded text-lg" />
-                <div className="mt-2 text-sm">
-                  {paidAmount === '' ? null : (
-                    paidAmount >= subtotal ? (
-                      <div className="text-green-600">Kembalian: {fmt.format(paidAmount - subtotal)}</div>
-                    ) : (
-                      <div className="text-red-600">Kurang: {fmt.format(subtotal - paidAmount)}</div>
-                    )
+              {/* Payment Input */}
+              <div>
+                <h3 className="font-semibold text-slate-900 mb-4">Pembayaran</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Jumlah Tunai</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Masukkan jumlah tunai..." 
+                      value={paidAmount === '' ? '' : paidAmount} 
+                      onChange={(e) => setPaidAmount(e.target.value === '' ? '' : Number(e.target.value))} 
+                      className="text-lg h-12"
+                    />
+                  </div>
+                  
+                  {paidAmount !== '' && (
+                    <div className={`p-3 rounded-lg ${paidAmount >= subtotal ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                      {paidAmount >= subtotal ? (
+                        <div>
+                          <div className="text-xs text-green-700 font-medium">Kembalian</div>
+                          <div className="text-2xl font-bold text-green-700">{fmt.format(paidAmount - subtotal)}</div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="text-xs text-red-700 font-medium">Kurang</div>
+                          <div className="text-2xl font-bold text-red-700">{fmt.format(subtotal - paidAmount)}</div>
+                        </div>
+                      )}
+                    </div>
                   )}
-                </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <Button onClick={() => { setCart([]); toast('Keranjang dikosongkan') }} className="w-full bg-red-50 text-red-700 hover:bg-red-100">Bersihkan</Button>
-                  <Button onClick={handleCheckout} disabled={cart.length === 0 || paidAmount === '' || Number(paidAmount) < subtotal} className="w-full bg-emerald-600 text-white hover:bg-emerald-700">Selesaikan</Button>
+                  <div className="flex gap-3 pt-2">
+                    <Button 
+                      onClick={() => { setCart([]); setPaidAmount(''); toast.success('Keranjang dikosongkan') }} 
+                      variant="outline"
+                      className="flex-1"
+                      disabled={cart.length === 0}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Hapus Semua
+                    </Button>
+                    <Button 
+                      onClick={handleCheckout} 
+                      disabled={cart.length === 0 || paidAmount === '' || Number(paidAmount) < subtotal} 
+                      className="flex-1 bg-sky-600 hover:bg-sky-700 text-white text-lg h-12"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Selesaikan
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </aside>
+        </div>
       </main>
 
       {/* Receipt modal (keeps functionality) */}
@@ -478,6 +546,17 @@ export default function KasirPage() {
           </div>
         </div>
       )}
+
+      {/* Camera Scanner Modal */}
+      <BarcodeCameraScanner
+        open={showCameraScanner}
+        onClose={() => setShowCameraScanner(false)}
+        onScanned={(detectedBarcode) => {
+          setBarcode(detectedBarcode)
+          handleBarcodeSubmit(detectedBarcode)
+          setShowCameraScanner(false)
+        }}
+      />
     </div>
   )
 }
