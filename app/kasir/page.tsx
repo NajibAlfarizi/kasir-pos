@@ -23,6 +23,9 @@ export default function KasirPage() {
   const [manualName, setManualName] = React.useState('')
   const [manualPrice, setManualPrice] = React.useState<string>('')
   const barcodeInputRef = React.useRef<HTMLInputElement>(null)
+  const [searchQuery, setSearchQuery] = React.useState('')
+  const [searchResults, setSearchResults] = React.useState<Product[]>([])
+  const [isSearching, setIsSearching] = React.useState(false)
 
   const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' })
 
@@ -194,6 +197,44 @@ export default function KasirPage() {
     toast.success('Produk manual ditambahkan')
   }
 
+  // Search products by name or barcode
+  const searchProducts = React.useCallback(async (query: string) => {
+    const trimmed = query.trim()
+    if (!trimmed) {
+      setSearchResults([])
+      return
+    }
+    
+    setIsSearching(true)
+    try {
+      const res = await fetch(`/api/produk?q=${encodeURIComponent(trimmed)}`)
+      if (!res.ok) {
+        toast.error('Gagal mencari produk')
+        setSearchResults([])
+        return
+      }
+      
+      const json = await res.json()
+      const data = Array.isArray(json) ? json : (json?.data ?? [])
+      setSearchResults(data)
+    } catch (err) {
+      console.error('Search error:', err)
+      toast.error('Gagal mencari produk')
+      setSearchResults([])
+    } finally {
+      setIsSearching(false)
+    }
+  }, [])
+
+  // Debounced search effect
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      searchProducts(searchQuery)
+    }, 300)
+    
+    return () => clearTimeout(timer)
+  }, [searchQuery, searchProducts])
+
   // Auto-focus to barcode input on mount
   React.useEffect(() => {
     if (barcodeInputRef.current) {
@@ -317,6 +358,78 @@ export default function KasirPage() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Product Search Input */}
+            <div className="relative">
+              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <Input
+                  placeholder="Cari produk..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-48 bg-transparent border-0 focus-visible:ring-0 px-0"
+                />
+              </div>
+              
+              {/* Search Results Dropdown */}
+              {searchQuery && (
+                <div className="absolute z-10 right-0 mt-2 w-96 bg-white border rounded-lg shadow-lg max-h-80 overflow-auto">
+                  {isSearching ? (
+                    <div className="p-4 text-center text-slate-500">
+                      <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-sky-600"></div>
+                      <div className="mt-2 text-sm">Mencari produk...</div>
+                    </div>
+                  ) : searchResults.length === 0 ? (
+                    <div className="p-4 text-center text-slate-500">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-slate-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div className="text-sm">Tidak ada produk ditemukan</div>
+                    </div>
+                  ) : (
+                    <div className="divide-y">
+                      {searchResults.map((product) => (
+                        <div
+                          key={product.id}
+                          onClick={() => {
+                            if (product.stock > 0) {
+                              addToCart(product)
+                              setSearchQuery('')
+                              setSearchResults([])
+                            } else {
+                              toast.error(`${product.name} stok habis`)
+                            }
+                          }}
+                          className={`p-3 hover:bg-sky-50 cursor-pointer transition-colors ${product.stock === 0 ? 'opacity-50' : ''}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900">{product.name}</div>
+                              <div className="text-sm text-slate-500 mt-1">
+                                {product.barcode && <span className="mr-3">Barcode: {product.barcode}</span>}
+                                <span className={`font-medium ${product.stock === 0 ? 'text-red-600' : product.stock < 10 ? 'text-yellow-600' : 'text-green-600'}`}>
+                                  Stok: {product.stock}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right ml-4">
+                              <div className="font-semibold text-sky-600">{fmt.format(product.price)}</div>
+                              {product.stock === 0 ? (
+                                <div className="text-xs text-red-600 mt-1">Habis</div>
+                              ) : (
+                                <div className="text-xs text-slate-500 mt-1">Klik untuk tambah</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Barcode Scanner Input */}
             <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -331,19 +444,6 @@ export default function KasirPage() {
                 className="w-48 bg-transparent border-0 focus-visible:ring-0 px-0" 
               />
             </div>
-
-            {/* Camera Scan Button */}
-            <Button 
-              onClick={() => setShowCameraScanner(true)} 
-              className="bg-sky-600 text-white hover:bg-sky-700"
-              size="sm"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              📷 Scan
-            </Button>
           </div>
         </div>
       </header>
