@@ -499,13 +499,13 @@ export default function KasirPage() {
             </div>
 
             {/* Cart Table */}
-            <div className="flex-1 bg-white rounded-lg border overflow-hidden flex flex-col min-h-0">
+            <div className="flex-1 bg-white rounded-lg border flex flex-col min-h-0 overflow-hidden">
               <div className="px-4 py-3 border-b bg-slate-50 flex items-center justify-between flex-none">
                 <h2 className="font-semibold text-slate-900">Keranjang Belanja</h2>
                 <span className="text-sm text-slate-500">{cart.length} item</span>
               </div>
               
-              <div className="flex-1 overflow-auto min-h-0">
+              <div className="flex-1 overflow-y-auto min-h-0">
               {cart.length === 0 ? (
                 <div className="h-full flex items-center justify-center">
                   <div className="text-center">
