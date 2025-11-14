@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 
 type Product = { id: number; name: string; price: number; stock: number; barcode?: string }
 type CartLine = { id: string; product?: Product; productId?: number; name?: string; qty: number; price: number }
-type ReceiptItem = { id: number; product?: Product | null; quantity: number; subtotal: number }
+type ReceiptItem = { id: number; product?: Product | null; name?: string | null; quantity: number; subtotal: number }
 type Receipt = { id: number; total: number; paid: number; change: number; createdAt: string; items: ReceiptItem[] }
 
 export default function KasirPage() {
@@ -692,7 +692,7 @@ export default function KasirPage() {
               <div className="space-y-2">
                 {receipt.items.map((it: ReceiptItem) => (
                   <div key={it.id} className="flex justify-between">
-                    <div>{it.product?.name || 'Produk'} x{it.quantity}</div>
+                    <div>{it.product?.name || it.name || 'Produk'} x{it.quantity}</div>
                     <div>{fmt.format(it.subtotal)}</div>
                   </div>
                 ))}

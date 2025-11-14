@@ -7,7 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 
-type TxItem = { id: number; product?: { id: number; name: string } | null; quantity: number; subtotal: number }
+type TxItem = { id: number; product?: { id: number; name: string } | null; name?: string | null; quantity: number; subtotal: number }
 type Tx = { id: number; total: number; paid: number; change: number; createdAt: string; items: TxItem[]; no?: number }
 
 export default function TransaksiPage() {
@@ -178,7 +178,7 @@ export default function TransaksiPage() {
             <div className="mt-4 space-y-2">
               {detail.items.map(it => (
                 <div key={it.id} className="flex justify-between">
-                  <div className="text-sm">{it.product?.name || 'Produk'} x{it.quantity}</div>
+                  <div className="text-sm">{it.product?.name || it.name || 'Produk'} x{it.quantity}</div>
                   <div className="text-sm">{fmt.format(it.subtotal)}</div>
                 </div>
               ))}
