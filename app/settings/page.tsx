@@ -13,6 +13,8 @@ type SettingsShape = {
   printerName?: string
   receiptHeader?: string
   receiptFooter?: string
+  autoPrint?: boolean
+  printCopies?: number
 }
 
 export default function SettingsPage() {
@@ -29,6 +31,8 @@ export default function SettingsPage() {
         if (!res.ok) throw new Error('Failed to load')
         const json = await res.json()
         if (!mounted) return
+        const autoPrintValue = json.autoPrint || json['print.auto'] || ''
+        const printCopiesValue = json.printCopies || json['print.copies'] || '1'
         setValues({
           storeName: json.storeName || json['store.name'] || json['storeName'] || '',
           storeAddress: json.storeAddress || json.address || '',
@@ -36,6 +40,8 @@ export default function SettingsPage() {
           printerName: json.printerName || '',
           receiptHeader: json.receiptHeader || '',
           receiptFooter: json.receiptFooter || '',
+          autoPrint: autoPrintValue === '1' || autoPrintValue === 'true' || autoPrintValue === true,
+          printCopies: parseInt(printCopiesValue) || 1,
         })
       } catch (err) {
         console.error(err)
@@ -60,6 +66,8 @@ export default function SettingsPage() {
       payload.printerName = values.printerName ?? ''
       payload.receiptHeader = values.receiptHeader ?? ''
       payload.receiptFooter = values.receiptFooter ?? ''
+      payload.autoPrint = values.autoPrint ? '1' : '0'
+      payload.printCopies = String(values.printCopies ?? 1)
 
       const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const json = await res.json()
@@ -142,6 +150,42 @@ export default function SettingsPage() {
 
           <label className="block text-sm font-medium mt-4 mb-1">Footer Struk</label>
           <textarea value={values.receiptFooter || ''} onChange={(e) => onChange('receiptFooter', e.target.value)} className="w-full border rounded px-2 py-2" rows={3} />
+
+          <div className="mt-4 pt-4 border-t">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <label className="block text-sm font-medium">Auto Print Struk</label>
+                <p className="text-xs text-slate-500 mt-1">Cetak struk otomatis setelah transaksi selesai</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setValues(s => ({ ...s, autoPrint: !s.autoPrint }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  values.autoPrint ? 'bg-sky-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    values.autoPrint ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <label className="block text-sm font-medium mb-1">Jumlah Copy Print</label>
+            <Input
+              type="number"
+              min="1"
+              max="10"
+              value={values.printCopies || 1}
+              onChange={(e) => {
+                const val = parseInt(e.target.value) || 1
+                setValues(s => ({ ...s, printCopies: Math.max(1, Math.min(10, val)) }))
+              }}
+              placeholder="1"
+            />
+            <p className="text-xs text-slate-500 mt-1">Berapa kali struk akan dicetak (1-10)</p>
+          </div>
         </div>
       </section>
 

@@ -34,22 +34,31 @@ export async function POST(req: Request, context: any) {
     const id = Number(params.id)
     if (!Number.isInteger(id) || id <= 0) return new Response(JSON.stringify({ error: 'invalid id' }), { status: 400 })
 
+    // Get copies parameter from query string (default to 1)
+    const url = new URL(req.url)
+    const copies = Math.max(1, Math.min(10, parseInt(url.searchParams.get('copies') || '1') || 1))
+    console.log(`📄 Printing ${copies} copies of transaction ${id}`)
+
     const tx = await prisma.transaction.findUnique({ where: { id }, include: { items: { include: { product: true } } } })
     if (!tx) return new Response(JSON.stringify({ error: 'Transaction not found' }), { status: 404 })
 
-    // load printer modules
-  const { coreModule, UsbAdapter } = await loadPrinterModules()
-  const { Printer } = coreModule
+    // Load printer modules once
+    const { coreModule, UsbAdapter } = await loadPrinterModules()
+    const { Printer } = coreModule
 
-    const device = new UsbAdapter()
-    await new Promise<void>((resolve, reject) => {
-      try {
-        device.open(function (err: any) {
-          if (err) return reject(err)
-          resolve()
-        })
-      } catch (e) { reject(e) }
-    })
+    // Print multiple copies with device reopen for each copy
+    for (let copyIndex = 0; copyIndex < copies; copyIndex++) {
+      console.log(`🖨️ Printing copy ${copyIndex + 1}/${copies}`)
+      
+      const device = new UsbAdapter()
+      await new Promise<void>((resolve, reject) => {
+        try {
+          device.open(function (err: any) {
+            if (err) return reject(err)
+            resolve()
+          })
+        } catch (e) { reject(e) }
+      })
 
   const options = { encoding: 'GB18030' }
   let printer = new Printer(device, options)
@@ -207,7 +216,13 @@ export async function POST(req: Request, context: any) {
       console.warn('Error during cut/close', closeEx)
     }
 
-    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    // Small delay between copies
+    if (copyIndex < copies - 1) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+  } // End of copies loop
+
+    return new Response(JSON.stringify({ ok: true, copies }), { status: 200 })
   } catch (err) {
     console.error('Print transaction failed', err)
     return new Response(JSON.stringify({ error: (err as Error).message || String(err) }), { status: 500 })

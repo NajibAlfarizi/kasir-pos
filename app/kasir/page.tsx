@@ -19,6 +19,7 @@ export default function KasirPage() {
   const [paidAmount, setPaidAmount] = React.useState<number | ''>('')
   const [receipt, setReceipt] = React.useState<Receipt | null>(null)
   const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(false)
+  const [printCopies, setPrintCopies] = React.useState(1)
   const [showCameraScanner, setShowCameraScanner] = React.useState(false)
   const [manualName, setManualName] = React.useState('')
   const [manualPrice, setManualPrice] = React.useState<string>('')
@@ -40,6 +41,9 @@ export default function KasirPage() {
         if (!mounted) return
         const v = (json['print.auto'] ?? json['autoPrint'] ?? '').toString().toLowerCase()
         setAutoPrintEnabled(v === '1' || v === 'true' || v === 'yes')
+        const copies = parseInt(json['printCopies'] ?? json['print.copies'] ?? '1') || 1
+        console.log('🖨️ Loaded print settings:', { autoPrint: v, printCopies: copies, rawJson: json })
+        setPrintCopies(copies)
       } catch (e) {
         console.warn('Failed to load settings for auto-print', e)
       }
@@ -320,17 +324,21 @@ export default function KasirPage() {
         console.log('🖨️ Initiating auto-print...')
         ;(async () => {
           try {
-            const printUrl = `/api/print/transaction/${json.id}`
-            console.log('🖨️ Calling print API:', printUrl)
+            const copiesToPrint = printCopies || 1
+            console.log(`🖨️ Printing ${copiesToPrint} copies`)
+            
+            const printUrl = `/api/print/transaction/${json.id}?copies=${copiesToPrint}`
+            console.log(`🖨️ Calling print API:`, printUrl)
             const pres = await fetch(printUrl, { method: 'POST' })
             const pj = await pres.json().catch(() => ({}))
-            console.log('🖨️ Print API response:', pres.status, pj)
+            console.log(`🖨️ Print API response:`, pres.status, pj)
+            
             if (!pres.ok) {
               console.warn('Auto-print (client) failed', pj)
               toast.error('Gagal mengirim perintah cetak otomatis')
             } else {
               console.log('✅ Print command sent successfully')
-              toast.success('Struk sedang dicetak...')
+              toast.success(`${copiesToPrint} struk sedang dicetak...`)
             }
           } catch (err) {
             console.error('Auto-print (client) error', err)
@@ -677,14 +685,17 @@ export default function KasirPage() {
                   if (!receipt?.id) return toast.error('Receipt ID tidak tersedia')
                   try {
                     const res = await fetch(`/api/print/transaction/${receipt.id}`, { method: 'POST' })
-                    const json = await res.json()
-                    if (!res.ok) return toast.error(json?.error || 'Gagal mencetak struk')
-                    toast.success('Perintah cetak dikirim ke printer')
+                    if (!res.ok) {
+                      const json = await res.json().catch(() => ({}))
+                      toast.error(json?.error || 'Gagal mencetak struk')
+                      return
+                    }
+                    toast.success('Struk sedang dicetak...')
                   } catch (err) {
                     console.error(err)
                     toast.error('Gagal menghubungi server cetak')
                   }
-                }}>Kirim ke Printer</Button>
+                }}>Cetak Struk</Button>
               </div>
             </div>
 
