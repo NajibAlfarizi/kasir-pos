@@ -289,10 +289,10 @@ export default function KasirPage() {
   const handleCheckout = async () => {
     if (cart.length === 0) return toast.error('Cart kosong')
     // submitting inline handled by submitPayment
-    await submitPayment({ forcePrint: true })
+    await submitPayment()
   }
 
-  const submitPayment = async (opts?: { forcePrint?: boolean }) => {
+  const submitPayment = async () => {
     if (paidAmount === '' || typeof paidAmount !== 'number') return toast.error('Masukkan jumlah tunai')
     const payload = {
       items: cart.map(l => l.productId ? ({ productId: l.productId, quantity: l.qty, price: l.price }) : ({ name: l.name, quantity: l.qty, price: l.price })),
@@ -312,15 +312,14 @@ export default function KasirPage() {
       setPaidAmount('')
       setReceipt(json)
 
-      // Print immediately if forced by caller (button) or if client-side auto-print is enabled.
+      // Print immediately if client-side auto-print is enabled.
       console.log('🖨️ Auto-print check:', {
-        forcePrint: opts?.forcePrint,
         autoPrintEnabled,
         transactionId: json?.id,
-        shouldPrint: (opts?.forcePrint) || (autoPrintEnabled && json?.id)
+        shouldPrint: autoPrintEnabled && json?.id
       })
       
-      if ((opts?.forcePrint) || (autoPrintEnabled && json?.id)) {
+      if (autoPrintEnabled && json?.id) {
         console.log('🖨️ Initiating auto-print...')
         ;(async () => {
           try {
