@@ -17,11 +17,30 @@ export async function GET() {
 
     const lowStockCount = await prisma.product.count({ where: { stock: { lte: 5 } } })
 
+    // Calculate profit today
+    const transactionsToday_items = await prisma.transaction.findMany({
+      where: { createdAt: { gte: startOfDay } },
+      include: { items: { include: { product: true } } }
+    })
+
+    let profitToday = 0
+    for (const tx of transactionsToday_items) {
+      for (const item of tx.items) {
+        if (item.product && item.product.cost) {
+          const itemPrice = item.price || item.product.price
+          const itemCost = item.product.cost
+          const itemProfit = (itemPrice - itemCost) * item.quantity
+          profitToday += itemProfit
+        }
+      }
+    }
+
     return NextResponse.json({
       salesToday: salesToday._sum.total || 0,
       transactionsToday,
       avgBasket,
       lowStockCount,
+      profitToday,
     })
   } catch (err) {
     console.error(err)

@@ -355,19 +355,19 @@ export default function KasirPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Header with scan and search */}
-      <header className="bg-white border-b px-6 py-4 flex-none">
+      <header className="bg-gradient-to-r from-sky-500 to-indigo-600 shadow-lg px-6 py-4 flex-none">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Kasir</h1>
-            <p className="text-sm text-slate-500">Scan barcode atau cari produk</p>
+            <h1 className="text-2xl font-bold text-white drop-shadow-sm">💰 Kasir</h1>
+            <p className="text-sm text-sky-100">Scan barcode atau cari produk</p>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Product Search Input */}
             <div className="relative">
-              <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border">
+              <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 border-0 shadow-md">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -438,7 +438,7 @@ export default function KasirPage() {
             </div>
 
             {/* Barcode Scanner Input */}
-            <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border">
+            <div className="flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-lg px-3 py-2 border-0 shadow-md">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
               </svg>
@@ -594,9 +594,12 @@ export default function KasirPage() {
 
           {/* Right Side: Payment Section */}
           <div className="lg:col-span-1 flex flex-col gap-4 overflow-hidden">
-            <div className="bg-white rounded-lg border p-6 flex-none">
+            <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl shadow-lg border-0 p-6 flex-none">
               {/* Total Summary */}
-              <h3 className="font-semibold text-slate-900 mb-4">Ringkasan</h3>
+              <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <span className="w-1 h-5 bg-gradient-to-b from-sky-500 to-indigo-500 rounded-full"></span>
+                Ringkasan
+              </h3>
               <div className="space-y-2 mb-6">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">Subtotal</span>
@@ -643,7 +646,7 @@ export default function KasirPage() {
                     <Button 
                       onClick={handleCheckout} 
                       disabled={cart.length === 0 || paidAmount === '' || Number(paidAmount) < subtotal} 
-                      className="w-full bg-sky-600 hover:bg-sky-700 text-white text-lg h-14"
+                      className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white text-lg h-14 shadow-lg"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

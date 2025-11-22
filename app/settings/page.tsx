@@ -120,17 +120,17 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) return <div className="p-6 bg-white rounded-lg shadow"><Spinner /></div>
+  if (loading) return <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50 p-6"><div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg p-6"><Spinner /></div></div>
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50 p-6 space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Pengaturan Aplikasi</h1>
-        <p className="text-sm text-slate-500">Atur nama toko, informasi kontak, dan printer struk.</p>
+        <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">⚙️ Pengaturan Aplikasi</h1>
+        <p className="text-sm text-slate-600">Atur nama toko, informasi kontak, dan printer struk.</p>
       </header>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white/80 backdrop-blur-sm p-6 rounded-xl shadow-lg border-0">
           <label className="block text-sm font-medium mb-1">Nama Toko</label>
           <Input value={values.storeName || ''} onChange={(e) => onChange('storeName', e.target.value)} />
 
@@ -141,7 +141,7 @@ export default function SettingsPage() {
           <Input value={values.storePhone || ''} onChange={(e) => onChange('storePhone', e.target.value)} />
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-white/80 backdrop-blur-sm p-6 rounded-xl shadow-lg border-0">
           <label className="block text-sm font-medium mb-1">Printer Struk (optional)</label>
           <Input value={values.printerName || ''} onChange={(e) => onChange('printerName', e.target.value)} placeholder="Nama printer atau descriptor" />
 
