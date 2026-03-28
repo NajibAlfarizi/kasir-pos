@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import BarcodeCameraScanner from '../components/BarcodeCameraScanner'
 import { toast } from 'sonner'
 // Separator and Table components removed from this redesigned page
@@ -404,6 +405,7 @@ export default function KasirPage() {
                   placeholder="Cari produk..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  disabled={isSubmitting}
                   className="w-48 bg-transparent border-0 focus-visible:ring-0 px-0"
                 />
               </div>
@@ -477,6 +479,7 @@ export default function KasirPage() {
                 value={barcode} 
                 onChange={(e) => setBarcode(e.target.value)} 
                 onKeyDown={handleBarcodeKeyDown}
+                disabled={isSubmitting}
                 className="w-48 bg-transparent border-0 focus-visible:ring-0 px-0" 
               />
             </div>
@@ -497,6 +500,7 @@ export default function KasirPage() {
                   placeholder="Nama produk..."
                   value={manualName}
                   onChange={(e) => setManualName(e.target.value)}
+                  disabled={isSubmitting}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault()
@@ -509,6 +513,7 @@ export default function KasirPage() {
                   placeholder="Harga (IDR)..."
                   value={manualPrice}
                   onChange={(e) => setManualPrice(e.target.value)}
+                  disabled={isSubmitting}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault()
@@ -517,7 +522,7 @@ export default function KasirPage() {
                   }}
                 />
                 <div className="flex gap-2">
-                  <Button onClick={addManualToCart} className="flex-1 bg-sky-600 hover:bg-sky-700">
+                  <Button onClick={addManualToCart} disabled={isSubmitting} className="flex-1 bg-sky-600 hover:bg-sky-700">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                     </svg>
@@ -526,7 +531,7 @@ export default function KasirPage() {
                   <Button 
                     variant="outline" 
                     onClick={() => { setManualName(''); setManualPrice('') }}
-                    disabled={!manualName && !manualPrice}
+                    disabled={(!manualName && !manualPrice) || isSubmitting}
                   >
                     Batal
                   </Button>
@@ -579,6 +584,7 @@ export default function KasirPage() {
                               size="sm" 
                               variant="outline" 
                               onClick={() => updateQty(line.id, line.qty - 1)}
+                              disabled={isSubmitting}
                               className="h-7 w-7 p-0"
                             >
                               -
@@ -587,12 +593,14 @@ export default function KasirPage() {
                               aria-label={`Qty ${line.product?.name ?? line.name}`} 
                               value={String(line.qty)} 
                               onChange={(e) => updateQty(line.id, Number(e.target.value || 1))} 
+                              disabled={isSubmitting}
                               className="w-16 border text-center rounded px-2 py-1 text-sm"
                             />
                             <Button 
                               size="sm" 
                               variant="outline" 
                               onClick={() => updateQty(line.id, line.qty + 1)}
+                              disabled={isSubmitting}
                               className="h-7 w-7 p-0"
                             >
                               +
@@ -605,6 +613,7 @@ export default function KasirPage() {
                             variant="ghost" 
                             size="sm" 
                             onClick={() => removeLine(line.id)} 
+                            disabled={isSubmitting}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -658,6 +667,7 @@ export default function KasirPage() {
                           void handleCheckout()
                         }
                       }}
+                      disabled={isSubmitting}
                       className="text-lg h-12"
                     />
                     <div className="mt-2 text-xs text-slate-500">
@@ -687,16 +697,25 @@ export default function KasirPage() {
                       disabled={isSubmitting || cart.length === 0 || paidAmount === '' || Number(paidAmount) < subtotal} 
                       className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white text-lg h-14 shadow-lg"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      {isSubmitting ? 'Memproses...' : 'Selesaikan Transaksi'}
+                      {isSubmitting ? (
+                        <>
+                          <Spinner className="h-5 w-5 mr-2" />
+                          Memproses...
+                        </>
+                      ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Selesaikan Transaksi
+                        </>
+                      )}
                     </Button>
                     <Button 
                       onClick={() => { setCart([]); setPaidAmount(''); toast.success('Keranjang dikosongkan') }} 
                       variant="outline"
                       className="w-full"
-                      disabled={cart.length === 0}
+                      disabled={cart.length === 0 || isSubmitting}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
