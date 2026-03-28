@@ -53,89 +53,36 @@ export async function GET(req: Request) {
 
   const total = await db.product.count({ where })
 
-    // If query provided, do fuzzy ranking in JS (fetch candidates, score & sort), then paginate
+    // If query provided: use database-level ordering and pagination
     if (q) {
-      // get candidates matching simple contains filter (to limit scope)
-  const candidates = await db.product.findMany({ where, include: ({ category: true, brand: true } as any) })
-
-      // Levenshtein distance implementation
-      const levenshtein = (a: string, b: string) => {
-        const A = a || ''
-        const B = b || ''
-        const m = A.length
-        const n = B.length
-        const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
-        for (let i = 0; i <= m; i++) dp[i][0] = i
-        for (let j = 0; j <= n; j++) dp[0][j] = j
-        for (let i = 1; i <= m; i++) {
-          for (let j = 1; j <= n; j++) {
-            const cost = A[i - 1] === B[j - 1] ? 0 : 1
-            dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
-          }
+      // Limit candidates to 100 for better performance, use database ordering
+      const allowed = ['name', 'price', 'stock', 'createdAt', 'category', 'brand']
+      const orderByArr: Prisma.ProductOrderByWithRelationInput[] = []
+      
+      // Build order by from sort params
+      for (let i = 0; i < sortByArray.length; i++) {
+        const col = sortByArray[i]
+        const dir = (sortDirArray[i] === 'desc') ? 'desc' : 'asc'
+        if (!allowed.includes(col)) continue
+        if (col === 'category') {
+          orderByArr.push({ category: { name: dir as Prisma.SortOrder } })
+        } else {
+          orderByArr.push({ [col]: dir as Prisma.SortOrder } as Prisma.ProductOrderByWithRelationInput)
         }
-        return dp[m][n]
       }
 
-      const normalizedScore = (s: string, qstr: string) => {
-        const a = (s || '').toLowerCase()
-        const b = (qstr || '').toLowerCase()
-        if (!a && !b) return 1
-        if (!a || !b) return 0
-        const dist = levenshtein(a, b)
-        const maxLen = Math.max(a.length, b.length)
-        return maxLen === 0 ? 1 : 1 - dist / maxLen
-      }
+      // Use database to fetch and order, then paginate
+      const defaultPerPage = perPage === null ? 10 : perPage
+      const candidates = await db.product.findMany({
+        where,
+        include: ({ category: true, brand: true } as any),
+        orderBy: orderByArr.length ? orderByArr : { name: 'asc' },
+        skip: (page - 1) * defaultPerPage,
+        take: defaultPerPage,
+      })
 
-  // compute score per candidate (name, category, brand) and attach
-  const scored = (candidates as any[]).map((p: any) => {
-    const nameScore = normalizedScore(p.name || '', q)
-    const catScore = normalizedScore(p.category?.name || '', q)
-    const brandScore = normalizedScore(p.brand?.name || '', q)
-    const score = Math.max(nameScore, catScore, brandScore)
-    return { product: p, score }
-  })
-
-      // primary sort: fuzzy score desc
-      scored.sort((a, b) => b.score - a.score)
-
-      // secondary multi-column sort using sortByArray & sortDirArray
-      if (sortByArray.length > 0) {
-        scored.sort((a, b) => {
-          // if score differs significantly, keep order by score
-          const diff = b.score - a.score
-          if (Math.abs(diff) > 1e-6) return diff > 0 ? 1 : -1
-          for (let i = 0; i < sortByArray.length; i++) {
-            const key = sortByArray[i]
-            const dir = (sortDirArray[i] === 'desc') ? -1 : 1
-            let aval: unknown = (a.product as unknown as Record<string, unknown>)[key]
-            let bval: unknown = (b.product as unknown as Record<string, unknown>)[key]
-            if (key === 'category') {
-              aval = (a.product as any).category?.name ?? ''
-              bval = (b.product as any).category?.name ?? ''
-            }
-            if (key === 'brand') {
-              aval = (a.product as any).brand?.name ?? ''
-              bval = (b.product as any).brand?.name ?? ''
-            }
-            const avalStr = aval === null || aval === undefined ? '' : String(aval)
-            const bvalStr = bval === null || bval === undefined ? '' : String(bval)
-            if (avalStr < bvalStr) return -1 * dir
-            if (avalStr > bvalStr) return 1 * dir
-          }
-          return 0
-        })
-      }
-
-      const totalMatches = scored.length
-      if (perPage === null) {
-        // return all matches when perPage omitted
-        const pageItems = scored.map(s => s.product)
-        return new Response(JSON.stringify({ data: pageItems, total: totalMatches, page: 1, perPage: totalMatches }), { status: 200 })
-      }
-      const start = (page - 1) * perPage
-      const end = start + perPage
-      const pageItems = scored.slice(start, end).map(s => s.product)
-      return new Response(JSON.stringify({ data: pageItems, total: totalMatches, page, perPage }), { status: 200 })
+      const totalMatches = total
+      return new Response(JSON.stringify({ data: candidates, total: totalMatches, page, perPage: defaultPerPage }), { status: 200 })
     }
 
     // No query: use database ordering and pagination (support multi-column)

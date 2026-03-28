@@ -2,10 +2,47 @@
 import prisma from "../../../lib/prisma"
 import { Prisma } from '@prisma/client'
 
-export async function GET() {
-  // List categories
-  const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
-  return new Response(JSON.stringify(categories), { status: 200 })
+// Revalidate categories every 1 hour (static data, rarely changes)
+export const revalidate = 3600
+
+export async function GET(req: Request) {
+  // List categories with pagination support
+  try {
+    const url = new URL(req.url)
+    const pageRaw = Number(url.searchParams.get('page') || '1')
+    const perPageParam = url.searchParams.get('perPage')
+    const perPageRaw = perPageParam === null ? 10 : Number(perPageParam) // Default: 10 per page
+    const page = Number.isInteger(pageRaw) && pageRaw > 0 ? pageRaw : 1
+    const perPage = Number.isInteger(perPageRaw) && perPageRaw > 0 ? perPageRaw : 10
+
+    // Support simple search
+    const q = (url.searchParams.get('q') ?? '').trim()
+    const where: Record<string, unknown> = {}
+    if (q) {
+      where.name = { contains: q }
+    }
+
+    const total = await prisma.category.count({ where })
+    const categories = await prisma.category.findMany({
+      where,
+      orderBy: { name: 'asc' },
+      skip: (page - 1) * perPage,
+      take: perPage,
+    })
+
+    return new Response(
+      JSON.stringify({ data: categories, total, page, perPage }),
+      {
+        status: 200,
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200',
+        }
+      }
+    )
+  } catch (err) {
+    const e = err as Error
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 })
+  }
 }
 
 export async function POST(req: Request) {

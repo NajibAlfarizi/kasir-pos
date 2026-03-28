@@ -5,6 +5,9 @@ import prisma from "../../../lib/prisma"
 const db: any = prisma
 import { Prisma } from '@prisma/client'
 
+// Revalidate brands every 1 hour (static data, rarely changes)
+export const revalidate = 3600
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url)
@@ -36,19 +39,21 @@ export async function GET(req: Request) {
 
     const total = await db.brand.count({ where })
 
-    if (q || perPage !== null) {
-      // fetch with pagination
-      if (perPage === null) {
-        const items = await db.brand.findMany({ where, orderBy: { name: 'asc' }, include: { category: true } })
-        return new Response(JSON.stringify({ data: items, total, page: 1, perPage: items.length }), { status: 200 })
+    // Always use pagination (default: 10 per page if not specified)
+    const actualPerPage = perPage === null ? 10 : perPage
+    const items = await db.brand.findMany({
+      where,
+      include: { category: true },
+      orderBy: { name: 'asc' },
+      skip: (page - 1) * actualPerPage,
+      take: actualPerPage,
+    })
+    return new Response(JSON.stringify({ data: items, total, page, perPage: actualPerPage }), {
+      status: 200,
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200',
       }
-      const items = await db.brand.findMany({ where, include: { category: true }, orderBy: { name: 'asc' }, skip: (page - 1) * perPage, take: perPage })
-      return new Response(JSON.stringify({ data: items, total, page, perPage }), { status: 200 })
-    }
-
-    // default: return all brands
-    const brands = await db.brand.findMany({ orderBy: { name: 'asc' }, include: { category: true } })
-    return new Response(JSON.stringify({ data: brands, total: brands.length, page: 1, perPage: brands.length }), { status: 200 })
+    })
   } catch (err) {
     const e = err as Error
     return new Response(JSON.stringify({ error: e.message }), { status: 500 })

@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { calculateItemProfit } from '@/lib/profit-calculation'
+
+// Reports can be cached longer since they're historical
+export const revalidate = 1800
 
 export async function GET(req: Request) {
   try {
@@ -52,10 +56,7 @@ export async function GET(req: Request) {
       totalSales += tx.total
 
       for (const item of tx.items) {
-        const itemPrice = item.price || (item.product?.price ?? 0)
-        const itemCost = item.product?.cost ?? 0
-        const itemProfit = (itemPrice - itemCost) * item.quantity
-
+        const itemProfit = calculateItemProfit(item)
         totalProfit += itemProfit
 
         // Product stats
@@ -81,12 +82,10 @@ export async function GET(req: Request) {
       dailyStats[dateKey].sales += tx.total
       dailyStats[dateKey].transactions += 1
 
-      // Calculate profit for this transaction
+      // Calculate profit for this transaction using utility
       let txProfit = 0
       for (const item of tx.items) {
-        const itemPrice = item.price || (item.product?.price ?? 0)
-        const itemCost = item.product?.cost ?? 0
-        txProfit += (itemPrice - itemCost) * item.quantity
+        txProfit += calculateItemProfit(item)
       }
       dailyStats[dateKey].profit += txProfit
     }
@@ -113,6 +112,10 @@ export async function GET(req: Request) {
       avgBasket,
       topProducts,
       dailySales,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600',
+      }
     })
   } catch (err) {
     console.error('Error generating report:', err)

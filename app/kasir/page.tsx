@@ -17,6 +17,7 @@ export default function KasirPage() {
   const [barcode, setBarcode] = React.useState('')
   const [cart, setCart] = React.useState<CartLine[]>([])
   const [paidAmount, setPaidAmount] = React.useState<number | ''>('')
+  const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [receipt, setReceipt] = React.useState<Receipt | null>(null)
   const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(false)
   const [printCopies, setPrintCopies] = React.useState(1)
@@ -27,6 +28,9 @@ export default function KasirPage() {
   const [searchQuery, setSearchQuery] = React.useState('')
   const [searchResults, setSearchResults] = React.useState<Product[]>([])
   const [isSearching, setIsSearching] = React.useState(false)
+  const [searchCache, setSearchCache] = React.useState<Record<string, { results: Product[]; timestamp: number }>>({})
+  const paymentInputRef = React.useRef<HTMLInputElement>(null)
+  const searchInputRef = React.useRef<HTMLInputElement>(null)
 
   const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' })
 
@@ -42,7 +46,6 @@ export default function KasirPage() {
         const v = (json['print.auto'] ?? json['autoPrint'] ?? '').toString().toLowerCase()
         setAutoPrintEnabled(v === '1' || v === 'true' || v === 'yes')
         const copies = parseInt(json['printCopies'] ?? json['print.copies'] ?? '1') || 1
-        console.log('🖨️ Loaded print settings:', { autoPrint: v, printCopies: copies, rawJson: json })
         setPrintCopies(copies)
       } catch (e) {
         console.warn('Failed to load settings for auto-print', e)
@@ -52,121 +55,57 @@ export default function KasirPage() {
   }, [])
 
   const addToCart = React.useCallback((p: Product) => {
-    console.log('🛒 addToCart function called')
-    console.log('🛒 Product to add:', p)
-    
     setCart((prevCart) => {
-      console.log('🛒 Current cart before update:', prevCart)
-      
       const idx = prevCart.findIndex(x => x.productId === p.id)
-      console.log('🛒 Product index in cart:', idx)
-      
+
       if (idx !== -1) {
-        // increment qty but don't exceed stock
-        console.log('🛒 Product already in cart, incrementing qty')
+        // Increment qty and move updated item to the top for latest-scan-first ordering.
         const cloned = [...prevCart]
         const currentQty = cloned[idx].qty
         const next = Math.min(currentQty + 1, p.stock)
-        console.log(`🛒 Qty: ${currentQty} → ${next} (max: ${p.stock})`)
-        cloned[idx] = { ...cloned[idx], qty: next }
-        console.log('🛒 Updated cart:', cloned)
+        const updated = { ...cloned[idx], qty: next }
+        cloned.splice(idx, 1)
+        cloned.unshift(updated)
         return cloned
       }
-      
-      console.log('🛒 Product not in cart, adding new item')
+
       const newItem = { id: `p-${p.id}`, product: p, productId: p.id, qty: 1, price: p.price }
-      console.log('🛒 New cart item:', newItem)
-      const newCart = [...prevCart, newItem]
-      console.log('🛒 New cart:', newCart)
-      return newCart
+      return [newItem, ...prevCart]
     })
-    
-    console.log('🛒 addToCart function completed')
   }, [])
 
   // Barcode scanner: when user enters barcode and presses Enter, search for product and add to cart
   const handleBarcodeSubmit = React.useCallback(async (code: string) => {
     const trimmed = code.trim()
-    console.log('=====================================')
-    console.log('🔍 STEP 1: Starting barcode scan')
-    console.log('📋 Barcode input:', code)
-    console.log('📋 Trimmed barcode:', trimmed)
-    console.log('📋 Barcode length:', trimmed.length)
-    
-    if (!trimmed) {
-      console.log('❌ Barcode is empty, stopping')
-      return
-    }
-    
+    if (!trimmed) return
+
     try {
-      console.log('🌐 STEP 2: Fetching from API...')
       const url = `/api/produk?q=${encodeURIComponent(trimmed)}`
-      console.log('🌐 API URL:', url)
-      
       const res = await fetch(url)
-      console.log('📡 STEP 3: Response status:', res.status)
-      
+
       if (!res.ok) {
-        console.log('❌ Response not OK')
         toast.error('Gagal mencari produk')
         return
       }
-      
+
       const json = await res.json()
-      console.log('📦 STEP 4: Raw API Response:', json)
-      console.log('📦 Response type:', Array.isArray(json) ? 'Array' : 'Object')
-      
       const data = Array.isArray(json) ? json : (json?.data ?? [])
-      console.log('📋 STEP 5: Parsed data array:', data)
-      console.log('📋 Number of products found:', data.length)
-      
-      // Log all products with their barcodes
-      data.forEach((p: Product, index: number) => {
-        console.log(`   Product ${index + 1}:`, {
-          id: p.id,
-          name: p.name,
-          barcode: p.barcode,
-          price: p.price,
-          stock: p.stock
-        })
-      })
-      
-      console.log('🔎 STEP 6: Looking for exact match...')
-      console.log('🔎 Searching for barcode:', trimmed)
-      
+
       // Find exact barcode match
-      const match = data.find((p: Product) => {
-        const matches = p.barcode === trimmed
-        console.log(`   Comparing: "${p.barcode}" === "${trimmed}" = ${matches}`)
-        return matches
-      })
-      
-      console.log('✅ STEP 7: Match result:', match)
-      
+      const match = data.find((p: Product) => p.barcode === trimmed)
+
       if (match) {
-        console.log('🎉 Product found!')
-        console.log('📦 Product details:', match)
-        console.log('📊 Stock:', match.stock)
-        
         if (match.stock > 0) {
-          console.log('✅ Stock available, adding to cart...')
           addToCart(match)
           toast.success(`${match.name} ditambahkan ke keranjang`)
           setBarcode('') // clear after adding
-          console.log('✅ Product added to cart successfully')
         } else {
-          console.log('❌ Stock is 0')
           toast.error(`${match.name} stok habis`)
         }
       } else {
-        console.log('❌ No exact match found')
-        console.log('❌ Searched barcode:', trimmed)
-        console.log('❌ Available barcodes:', data.map((p: Product) => p.barcode))
         toast.error(`Produk dengan barcode "${trimmed}" tidak ditemukan`)
       }
-      console.log('=====================================')
-    } catch (err) {
-      console.error('❌ ERROR in barcode search:', err)
+    } catch {
       toast.error('Gagal mencari produk')
     }
   }, [addToCart])
@@ -201,11 +140,18 @@ export default function KasirPage() {
     toast.success('Produk manual ditambahkan')
   }
 
-  // Search products by name or barcode
+  // Search products by name or barcode with client-side cache
   const searchProducts = React.useCallback(async (query: string) => {
     const trimmed = query.trim()
     if (!trimmed) {
       setSearchResults([])
+      return
+    }
+    
+    // Check cache: use cached results if available and less than 5 minutes old
+    const cached = searchCache[trimmed]
+    if (cached && Date.now() - cached.timestamp < 300000) { // 5 minutes
+      setSearchResults(cached.results)
       return
     }
     
@@ -221,6 +167,12 @@ export default function KasirPage() {
       const json = await res.json()
       const data = Array.isArray(json) ? json : (json?.data ?? [])
       setSearchResults(data)
+      
+      // Update cache
+      setSearchCache(prev => ({
+        ...prev,
+        [trimmed]: { results: data, timestamp: Date.now() }
+      }))
     } catch (err) {
       console.error('Search error:', err)
       toast.error('Gagal mencari produk')
@@ -228,7 +180,7 @@ export default function KasirPage() {
     } finally {
       setIsSearching(false)
     }
-  }, [])
+  }, [searchCache])
 
   // Debounced search effect
   React.useEffect(() => {
@@ -261,7 +213,6 @@ export default function KasirPage() {
       // Barcode scanner sends characters quickly followed by Enter
       if (e.key === 'Enter') {
         if (buffer.length > 0) {
-          console.log('🔍 Physical barcode scanner detected:', buffer)
           handleBarcodeSubmit(buffer)
           buffer = ''
         }
@@ -286,19 +237,18 @@ export default function KasirPage() {
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0)
 
-  const handleCheckout = async () => {
-    if (cart.length === 0) return toast.error('Cart kosong')
-    // submitting inline handled by submitPayment
-    await submitPayment()
-  }
-
-  const submitPayment = async () => {
+  const submitPayment = React.useCallback(async () => {
+    if (isSubmitting) return
     if (paidAmount === '' || typeof paidAmount !== 'number') return toast.error('Masukkan jumlah tunai')
+    if (cart.length === 0) return toast.error('Cart kosong')
+    if (Number(paidAmount) < subtotal) return toast.error('Jumlah tunai kurang')
+
     const payload = {
       items: cart.map(l => l.productId ? ({ productId: l.productId, quantity: l.qty, price: l.price }) : ({ name: l.name, quantity: l.qty, price: l.price })),
       paid: paidAmount,
     }
     try {
+      setIsSubmitting(true)
       const res = await fetch('/api/transaksi', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const json = await res.json()
       if (!res.ok) {
@@ -313,30 +263,19 @@ export default function KasirPage() {
       setReceipt(json)
 
       // Print immediately if client-side auto-print is enabled.
-      console.log('🖨️ Auto-print check:', {
-        autoPrintEnabled,
-        transactionId: json?.id,
-        shouldPrint: autoPrintEnabled && json?.id
-      })
-      
       if (autoPrintEnabled && json?.id) {
-        console.log('🖨️ Initiating auto-print...')
         ;(async () => {
           try {
             const copiesToPrint = printCopies || 1
-            console.log(`🖨️ Printing ${copiesToPrint} copies`)
-            
+
             const printUrl = `/api/print/transaction/${json.id}?copies=${copiesToPrint}`
-            console.log(`🖨️ Calling print API:`, printUrl)
             const pres = await fetch(printUrl, { method: 'POST' })
             const pj = await pres.json().catch(() => ({}))
-            console.log(`🖨️ Print API response:`, pres.status, pj)
-            
+
             if (!pres.ok) {
               console.warn('Auto-print (client) failed', pj)
               toast.error('Gagal mengirim perintah cetak otomatis')
             } else {
-              console.log('✅ Print command sent successfully')
               toast.success(`${copiesToPrint} struk sedang dicetak...`)
             }
           } catch (err) {
@@ -344,15 +283,104 @@ export default function KasirPage() {
             toast.error('Gagal menghubungi server cetak otomatis')
           }
         })()
-      } else {
-        console.log('⏭️ Auto-print skipped (not enabled or forced)')
       }
 
     } catch (err) {
       console.error(err)
       toast.error('Gagal melakukan transaksi')
+    } finally {
+      setIsSubmitting(false)
     }
-  }
+  }, [autoPrintEnabled, cart, isSubmitting, paidAmount, printCopies, subtotal])
+
+  const handleCheckout = React.useCallback(async () => {
+    if (cart.length === 0) return toast.error('Cart kosong')
+    // submitting inline handled by submitPayment
+    await submitPayment()
+  }, [cart.length, submitPayment])
+
+  const fillExactCash = React.useCallback(() => {
+    if (cart.length === 0) return
+    setPaidAmount(subtotal)
+    paymentInputRef.current?.focus()
+    toast.success('Tunai diisi pas sesuai total')
+  }, [cart.length, subtotal])
+
+  const fillRoundedCash = React.useCallback(() => {
+    if (cart.length === 0) return
+    const rounded = Math.ceil(subtotal / 1000) * 1000
+    setPaidAmount(rounded)
+    paymentInputRef.current?.focus()
+    toast.success('Tunai dibulatkan ke atas (ribuan terdekat)')
+  }, [cart.length, subtotal])
+
+  React.useEffect(() => {
+    const handleShortcut = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase()
+
+      // Esc: close receipt modal quickly
+      if (key === 'escape' && receipt) {
+        e.preventDefault()
+        setReceipt(null)
+        return
+      }
+
+      // F2: focus barcode input
+      if (e.key === 'F2') {
+        e.preventDefault()
+        barcodeInputRef.current?.focus()
+        return
+      }
+
+      // F4: focus payment input
+      if (e.key === 'F4') {
+        e.preventDefault()
+        paymentInputRef.current?.focus()
+        return
+      }
+
+      // F6: fill exact cash amount (same as subtotal)
+      if (e.key === 'F6') {
+        e.preventDefault()
+        fillExactCash()
+        return
+      }
+
+      // F7: fill rounded cash amount (nearest 1000 above subtotal)
+      if (e.key === 'F7') {
+        e.preventDefault()
+        fillRoundedCash()
+        return
+      }
+
+      // F8: focus product search input
+      if (e.key === 'F8') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        return
+      }
+
+      // F9: complete transaction
+      if (e.key === 'F9') {
+        e.preventDefault()
+        void handleCheckout()
+        return
+      }
+
+      // Alt+X: clear cart quickly
+      if (e.altKey && key === 'x') {
+        if (cart.length > 0) {
+          e.preventDefault()
+          setCart([])
+          setPaidAmount('')
+          toast.success('Keranjang dikosongkan')
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [cart.length, fillExactCash, fillRoundedCash, handleCheckout, receipt])
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -372,6 +400,7 @@ export default function KasirPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 <Input
+                  ref={searchInputRef}
                   placeholder="Cari produk..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -618,12 +647,22 @@ export default function KasirPage() {
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">Jumlah Tunai</label>
                     <Input 
+                      ref={paymentInputRef}
                       type="number" 
                       placeholder="Masukkan jumlah tunai..." 
                       value={paidAmount === '' ? '' : paidAmount} 
                       onChange={(e) => setPaidAmount(e.target.value === '' ? '' : Number(e.target.value))} 
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void handleCheckout()
+                        }
+                      }}
                       className="text-lg h-12"
                     />
+                    <div className="mt-2 text-xs text-slate-500">
+                      Shortcut: <span className="font-medium">Enter</span> selesai, <span className="font-medium">F2</span> barcode, <span className="font-medium">F4</span> tunai, <span className="font-medium">F6</span> tunai pas, <span className="font-medium">F7</span> tunai bulat, <span className="font-medium">F8</span> cari, <span className="font-medium">F9</span> bayar, <span className="font-medium">Alt+X</span> hapus semua.
+                    </div>
                   </div>
                   
                   {paidAmount !== '' && (
@@ -645,13 +684,13 @@ export default function KasirPage() {
                   <div className="flex flex-col gap-3 pt-2">
                     <Button 
                       onClick={handleCheckout} 
-                      disabled={cart.length === 0 || paidAmount === '' || Number(paidAmount) < subtotal} 
+                      disabled={isSubmitting || cart.length === 0 || paidAmount === '' || Number(paidAmount) < subtotal} 
                       className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white text-lg h-14 shadow-lg"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      Selesaikan Transaksi
+                      {isSubmitting ? 'Memproses...' : 'Selesaikan Transaksi'}
                     </Button>
                     <Button 
                       onClick={() => { setCart([]); setPaidAmount(''); toast.success('Keranjang dikosongkan') }} 

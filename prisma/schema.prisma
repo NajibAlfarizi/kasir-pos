@@ -40,6 +40,11 @@ model Product {
   brand      Brand?    @relation(fields: [brandId], references: [id])
   createdAt  DateTime  @default(now())
   transactionItems TransactionItem[]
+  
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([name])
+  @@index([barcode])
 }
 
 model Brand {
@@ -58,6 +63,8 @@ model Transaction {
   change     Int?
   createdAt  DateTime        @default(now())
   items      TransactionItem[]
+  
+  @@index([createdAt])
 }
 
 model TransactionItem {
@@ -70,6 +77,9 @@ model TransactionItem {
   transactionId Int
   product       Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
   transaction   Transaction   @relation(fields: [transactionId], references: [id])
+  
+  @@index([transactionId])
+  @@index([productId])
 }
 
 /// Simple key/value settings table for app configuration (store name, contact, printer, etc.)

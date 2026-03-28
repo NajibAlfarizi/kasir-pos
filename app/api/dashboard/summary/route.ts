@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { calculateItemsProfit } from '@/lib/profit-calculation'
+
+// Revalidate summary every 30 seconds (frequent updates for dashboard)
+export const revalidate = 30
 
 export async function GET() {
   try {
@@ -17,23 +21,15 @@ export async function GET() {
 
     const lowStockCount = await prisma.product.count({ where: { stock: { lte: 5 } } })
 
-    // Calculate profit today
-    const transactionsToday_items = await prisma.transaction.findMany({
-      where: { createdAt: { gte: startOfDay } },
-      include: { items: { include: { product: true } } }
+    // Calculate profit today using utility function
+    const transactionsToday_items = await prisma.transactionItem.findMany({
+      where: { 
+        transaction: { createdAt: { gte: startOfDay } }
+      },
+      include: { product: { select: { cost: true, price: true } } }
     })
 
-    let profitToday = 0
-    for (const tx of transactionsToday_items) {
-      for (const item of tx.items) {
-        if (item.product && item.product.cost) {
-          const itemPrice = item.price || item.product.price
-          const itemCost = item.product.cost
-          const itemProfit = (itemPrice - itemCost) * item.quantity
-          profitToday += itemProfit
-        }
-      }
-    }
+    const profitToday = calculateItemsProfit(transactionsToday_items)
 
     return NextResponse.json({
       salesToday: salesToday._sum.total || 0,
@@ -41,6 +37,10 @@ export async function GET() {
       avgBasket,
       lowStockCount,
       profitToday,
+    }, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
+      }
     })
   } catch (err) {
     console.error(err)

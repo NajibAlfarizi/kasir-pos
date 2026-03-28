@@ -5,6 +5,9 @@ import prisma from "../../../lib/prisma"
 import * as printTransactionHandler from "../print/transaction/[id]/route"
 import { Prisma } from '@prisma/client'
 
+// Revalidate transaction list every 10 seconds
+export const revalidate = 10
+
 type CreateItem = { productId?: number; quantity: number; price?: number; name?: string }
 
 export async function POST(req: Request) {
@@ -41,13 +44,16 @@ export async function POST(req: Request) {
       const prodMap = new Map<number, typeof products[0]>()
       for (const p of products) prodMap.set(p.id, p)
 
-      // verify stock for product items
+      // Verify stock using aggregated demand per product (prevents oversell on duplicate product lines)
+      const requestedQtyByProduct = new Map<number, number>()
       for (const it of parsedItems) {
-        if (it.productId) {
-          const p = prodMap.get(it.productId)
-          if (!p) throw new Error(`Produk dengan id ${it.productId} tidak ditemukan`)
-          if (p.stock < it.quantity) throw new Error(`Stok tidak cukup untuk ${p.name || p.id}`)
-        }
+        if (!it.productId) continue
+        requestedQtyByProduct.set(it.productId, (requestedQtyByProduct.get(it.productId) ?? 0) + it.quantity)
+      }
+      for (const [productId, totalQty] of requestedQtyByProduct.entries()) {
+        const p = prodMap.get(productId)
+        if (!p) throw new Error(`Produk dengan id ${productId} tidak ditemukan`)
+        if (p.stock < totalQty) throw new Error(`Stok tidak cukup untuk ${p.name || p.id}`)
       }
 
       // compute totals and prepare create payloads
@@ -70,19 +76,48 @@ export async function POST(req: Request) {
 
       if (paid < total) throw new Error('Paid amount is less than total')
 
-      // create transaction
+      // Create transaction header first
       const created = await tx.transaction.create({ data: { total, paid, change: paid - total } })
 
-      // create items and decrement stock for product items
-      for (const it of itemsToCreate) {
-        // Cast data to any because Prisma client types may be out-of-sync until migration is applied locally
-        await tx.transactionItem.create({ data: ({ productId: it.productId, name: it.name ?? undefined, price: it.price ?? undefined, quantity: it.quantity, subtotal: it.subtotal, transactionId: created.id } as any) })
-        if (it.productId) {
-          await tx.product.update({ where: { id: it.productId }, data: { stock: { decrement: it.quantity } } })
-        }
+      // Batch create transaction items to reduce roundtrips
+      await tx.transactionItem.createMany({
+        data: itemsToCreate.map((it) => ({
+          productId: it.productId ?? null,
+          name: it.name ?? null,
+          price: it.price ?? null,
+          quantity: it.quantity,
+          subtotal: it.subtotal,
+          transactionId: created.id,
+        }))
+      })
+
+      // Decrement stock once per product using aggregated quantities
+      for (const [productId, totalQty] of requestedQtyByProduct.entries()) {
+        await tx.product.update({
+          where: { id: productId },
+          data: { stock: { decrement: totalQty } }
+        })
       }
 
-      const withItems = await tx.transaction.findUnique({ where: { id: created.id }, include: { items: { include: { product: true } } } })
+      // Optimize: select only needed product fields for response
+      const withItems = await tx.transaction.findUnique({
+        where: { id: created.id },
+        include: {
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  barcode: true,
+                  price: true,
+                  cost: true,
+                }
+              }
+            }
+          }
+        }
+      })
 
       return withItems
     })
@@ -152,9 +187,34 @@ export async function GET(req: Request) {
     }
 
     const total = await prisma.transaction.count({ where })
-    const data = await prisma.transaction.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * perPage, take: perPage, include: { items: { include: { product: true } } } })
+    // Optimize: select only needed product fields instead of loading full product object
+    const data = await prisma.transaction.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * perPage,
+      take: perPage,
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                barcode: true,
+                // Omit: price, cost, stock, categoryId, brandId, createdAt, transactionItems
+              }
+            }
+          }
+        }
+      }
+    })
 
-    return new Response(JSON.stringify({ data, total, page, perPage }), { status: 200 })
+    return new Response(JSON.stringify({ data, total, page, perPage }), {
+      status: 200,
+      headers: {
+        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=20',
+      }
+    })
   } catch (err) {
     const e = err as Error
     return new Response(JSON.stringify({ error: e.message }), { status: 500 })
