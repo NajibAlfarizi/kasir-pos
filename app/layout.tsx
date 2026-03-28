@@ -2,11 +2,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { SidebarProvider } from "../components/ui/sidebar";
-import { AppSidebar } from "../components/app-sidebar";
-import { NavBar } from "../components/nav-bar";
-// Toaster (Sonner)
-import { Toaster } from "../components/ui/sonner";
+import { AppShell } from "../components/app-shell";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,26 +21,10 @@ export const metadata: Metadata = {
 
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const pathname = typeof window !== "undefined" ? window.location.pathname : "";
-  const isLogin = pathname.startsWith("/login");
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50`}>
-        {isLogin ? (
-          <main className="min-h-screen">{children}</main>
-        ) : (
-          <SidebarProvider>
-            <NavBar />
-            <div className="flex min-h-screen">
-              <AppSidebar />
-              <main className="flex-1 p-6 sm:p-10">
-                {children}
-              </main>
-              {/* Global toaster for notifications */}
-              <Toaster />
-            </div>
-          </SidebarProvider>
-        )}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

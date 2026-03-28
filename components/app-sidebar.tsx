@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Bot,
   GalleryVerticalEnd,
@@ -28,6 +28,7 @@ const navItems = [
 ]
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
+  const router = useRouter()
   const pathname = usePathname() || '/'
   const [storeName, setStoreName] = React.useState('Loading...')
 
@@ -50,6 +51,27 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
     })()
     return () => { mounted = false }
   }, [])
+
+  React.useEffect(() => {
+    const idlePrefetch = () => {
+      for (const item of navItems) {
+        router.prefetch(item.url)
+      }
+    }
+
+    const g = globalThis as typeof globalThis & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+      cancelIdleCallback?: (handle: number) => void
+    }
+
+    if (typeof g.requestIdleCallback === 'function') {
+      const id = g.requestIdleCallback(idlePrefetch, { timeout: 1200 })
+      return () => g.cancelIdleCallback?.(id)
+    }
+
+    const t = setTimeout(idlePrefetch, 300)
+    return () => clearTimeout(t)
+  }, [router])
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -84,7 +106,13 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
             const Icon = it.icon
             const active = pathname === it.url || pathname.startsWith(it.url + '/')
             return (
-              <Link key={it.url} href={it.url} className={`flex items-center gap-3 px-4 py-3 mx-2 rounded-lg mb-1 transition-all ${active ? 'bg-gradient-to-r from-sky-100 to-indigo-100 text-sky-700 shadow-md' : 'text-slate-700 hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100'}`}>
+              <Link
+                key={it.url}
+                href={it.url}
+                prefetch
+                onMouseEnter={() => router.prefetch(it.url)}
+                className={`flex items-center gap-3 px-4 py-3 mx-2 rounded-lg mb-1 transition-all ${active ? 'bg-gradient-to-r from-sky-100 to-indigo-100 text-sky-700 shadow-md' : 'text-slate-700 hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100'}`}
+              >
                 <span className={`p-1 rounded-md ${active ? 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-sm' : 'text-slate-500'}`}><Icon className="w-5 h-5" /></span>
                 <span className="text-sm font-medium">{it.title}</span>
               </Link>

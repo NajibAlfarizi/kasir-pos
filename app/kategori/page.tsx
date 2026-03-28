@@ -41,8 +41,13 @@ export default function KategoriPage() {
   const fetchCategories = async () => {
     setLoading(true)
     const res = await fetch('/api/kategori')
-    const data = await res.json()
-    setCategories(data)
+    const payload = await res.json()
+    const nextCategories = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+      ? payload.data
+      : []
+    setCategories(nextCategories)
     setLoading(false)
   }
 
