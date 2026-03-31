@@ -17,7 +17,7 @@ type Props = {
   open: boolean
   onClose: () => void
   onSaved?: (data?: unknown) => void
-  editing: { id: number; name: string; price: number; stock: number; cost?: number; category?: { id: number } | null; brand?: { id: number } | null } | null
+  editing: { id: number; name: string; price: number; stock: number; cost?: number; category?: { id: number } | null; brand?: { id: number } | null; barcode?: string } | null
 }
 
 export default function ModalProduk({ open, onClose, onSaved, editing }: Props) {
@@ -41,9 +41,9 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
   React.useEffect(() => {
     if (editing) {
       setName(editing.name || "")
-      setBarcode((editing as unknown as { barcode?: string }).barcode || "")
+      setBarcode(editing.barcode || "")
       setPrice(String(editing.price ?? ""))
-      setCost(String(editing.cost ?? ""))
+      setCost(String(editing.cost !== undefined && editing.cost !== null ? editing.cost : ""))
       setStock(String(editing.stock ?? ""))
       setCategoryId(editing.category?.id ?? null)
       setBrandId(editing.brand?.id ?? null)
@@ -56,11 +56,19 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
       setCategoryId(null)
       setBrandId(null)
     }
+    setError(null)
+    setFieldErrors({})
   }, [editing])
 
   React.useEffect(() => {
-    // focus name field when modal opens
-    if (open) setTimeout(() => nameRef.current?.focus(), 80)
+    // focus name field when modal opens and clear errors
+    if (open) {
+      setTimeout(() => nameRef.current?.focus(), 80)
+    } else {
+      // Clear errors when modal closes
+      setError(null)
+      setFieldErrors({})
+    }
   }, [open])
 
   // load categories for dropdown
@@ -169,8 +177,11 @@ export default function ModalProduk({ open, onClose, onSaved, editing }: Props) 
       }
   const data = await res.json()
   toast.success(editing ? 'Produk diperbarui' : 'Produk dibuat')
-  if (onSaved) onSaved(data)
-      onClose()
+  if (onSaved) {
+    onSaved(data)
+  } else {
+    onClose()
+  }
     } catch (err) {
       console.error(err)
       setError('Terjadi kesalahan saat menyimpan')

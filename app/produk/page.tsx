@@ -144,12 +144,38 @@ export default function ProdukPage() {
   }, [])
 
   React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 300)
+    const t = setTimeout(() => {
+      setDebouncedQuery(query)
+      setPage(1) // Reset to first page when search query changes
+    }, 300)
     return () => clearTimeout(t)
   }, [query])
 
+  // Reset page when filters change
+  React.useEffect(() => {
+    setPage(1)
+  }, [selectedCategory, selectedBrand])
+
   const onCreate = () => { setEditing(null); setOpenModal(true) }
   const onEdit = (p: Product) => { setEditing(p); setOpenModal(true) }
+
+  const onSavedProduct = (savedData: unknown) => {
+    const newProduct = savedData as Product
+    setProducts(prev => {
+      const idx = prev.findIndex(p => p.id === newProduct.id)
+      if (idx >= 0) {
+        // Update existing product
+        const updated = [...prev]
+        updated[idx] = newProduct
+        return updated
+      } else {
+        // Add new product
+        return [newProduct, ...prev]
+      }
+    })
+    setOpenModal(false)
+    setEditing(null)
+  }
 
   const onDelete = async (id: number) => {
     const res = await fetch(`/api/produk?id=${id}`, { method: 'DELETE' })
@@ -364,8 +390,8 @@ export default function ProdukPage() {
 
       <ModalProduk
         open={openModal}
-        onClose={() => setOpenModal(false)}
-        onSaved={() => { setOpenModal(false); fetchProducts() }}
+        onClose={() => { setOpenModal(false); setEditing(null) }}
+        onSaved={onSavedProduct}
         editing={editing}
       />
       <ConfirmDialog

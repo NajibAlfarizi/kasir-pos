@@ -225,7 +225,7 @@ export async function PUT(req: Request) {
   if (brId !== null) updateData.brandId = brId
   if (cost !== undefined) updateData.cost = cost
   if (trimmedBarcode !== null) updateData.barcode = trimmedBarcode.length > 0 ? trimmedBarcode : null
-  const updated = await db.product.update({ where: { id: parsedId }, data: updateData })
+  const updated = await db.product.update({ where: { id: parsedId }, data: updateData, include: { category: true, brand: true } })
     return new Response(JSON.stringify(updated), { status: 200 })
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
