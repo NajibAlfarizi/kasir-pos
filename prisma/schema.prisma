@@ -57,14 +57,16 @@ model Brand {
 }
 
 model Transaction {
-  id         Int             @id @default(autoincrement())
-  total      Int
-  paid       Int
-  change     Int?
-  createdAt  DateTime        @default(now())
-  items      TransactionItem[]
+  id            Int             @id @default(autoincrement())
+  total         Int
+  paid          Int
+  change        Int?
+  paymentMethod String          @default("CASH")
+  createdAt     DateTime        @default(now())
+  items         TransactionItem[]
   
   @@index([createdAt])
+  @@index([paymentMethod])
 }
 
 model TransactionItem {

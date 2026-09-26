@@ -1,16 +1,27 @@
 import React from 'react'
 import DashboardCharts from '@/components/DashboardCharts'
+import RecentTransactionsTable from '@/components/RecentTransactionsTable'
 import prisma from '@/lib/prisma'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import Link from 'next/link'
-
-function fmtCurrency(v: number) {
-  try {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(v)
-  } catch {
-    return `Rp ${v}`
-  }
-}
+import {
+  LayoutDashboard,
+  TrendingUp,
+  Wallet,
+  Receipt,
+  ShoppingBag,
+  Banknote,
+  QrCode,
+  LineChart,
+  Zap,
+  Clock,
+  ArrowUpRight,
+  ArrowDownRight,
+  Boxes,
+  RotateCw,
+  Download,
+} from 'lucide-react'
+import { formatRupiah, formatDateTime } from '@/lib/format'
 
 export default async function DashboardPage() {
   const startOfDay = new Date()
@@ -22,6 +33,23 @@ export default async function DashboardPage() {
   })
 
   const transactionsToday = await prisma.transaction.count({ where: { createdAt: { gte: startOfDay } } })
+
+  // Cash vs QRIS aggregates today
+  const cashSalesAgg = await prisma.transaction.aggregate({
+    _sum: { total: true },
+    where: { createdAt: { gte: startOfDay }, paymentMethod: 'CASH' } as any,
+  })
+  const cashTransactionsToday = await prisma.transaction.count({
+    where: { createdAt: { gte: startOfDay }, paymentMethod: 'CASH' } as any,
+  })
+
+  const qrisSalesAgg = await prisma.transaction.aggregate({
+    _sum: { total: true },
+    where: { createdAt: { gte: startOfDay }, paymentMethod: 'QRIS' } as any,
+  })
+  const qrisTransactionsToday = await prisma.transaction.count({
+    where: { createdAt: { gte: startOfDay }, paymentMethod: 'QRIS' } as any,
+  })
 
   const avgBasket = transactionsToday ? (salesTodayAgg._sum.total || 0) / transactionsToday : 0
 
@@ -46,119 +74,188 @@ export default async function DashboardPage() {
   const summary = {
     salesToday: salesTodayAgg._sum.total || 0,
     transactionsToday,
+    cashSalesToday: cashSalesAgg._sum.total || 0,
+    cashTransactionsToday,
+    qrisSalesToday: qrisSalesAgg._sum.total || 0,
+    qrisTransactionsToday,
     avgBasket,
     profitToday,
   }
 
-  const nowStr = new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })
+  const nowStr = formatDateTime(new Date())
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6 md:p-8">
-      <div className="max-w-screen-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold bg-gradient-to-r from-sky-600 to-indigo-600 bg-clip-text text-transparent">📊 Dashboard Kasir</h1>
-          <p className="text-sm text-slate-600">Ringkasan aktivitas dan performa toko — terakhir diperbarui {nowStr}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button className="inline-flex items-center gap-2 px-3 py-2 bg-white rounded shadow-sm text-sm hover:shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v6h6M20 20v-6h-6" /></svg>
-            Refresh
-          </button>
-          <button className="inline-flex items-center gap-2 px-3 py-2 bg-emerald-500 text-white rounded shadow-sm text-sm hover:bg-emerald-600">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2"/></svg>
-            Export
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-4 rounded-xl shadow-lg border-0 hover:shadow-xl transition-all flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-lg shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 3v18h18"/></svg>
-          </div>
+    <div className="min-h-screen bg-slate-50/70 p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200">
           <div>
-            <div className="text-sm text-gray-500">Penjualan Hari Ini</div>
-            <div className="text-xl font-semibold">{fmtCurrency(summary.salesToday)}</div>
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-600">
+                <LayoutDashboard className="w-6 h-6" />
+              </div>
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
+                Dashboard Kasir
+              </h1>
+            </div>
+            <p suppressHydrationWarning className="text-sm text-slate-500 mt-1">
+              Ringkasan performa penjualan dan transaksi toko hari ini — diperbarui {nowStr}
+            </p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-lg text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-all"
+            >
+              <RotateCw className="h-3.5 w-3.5 text-slate-500" />
+              Refresh
+            </Link>
+            <Link
+              href="/laporan"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-all"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Lihat Laporan
+            </Link>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-xl shadow-lg border-0 hover:shadow-xl transition-all flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 text-white rounded-lg shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        {/* Main 4 Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* 1. Penjualan Hari Ini */}
+          <div className="bg-gradient-to-br from-indigo-50/90 to-blue-50/70 p-5 rounded-xl border border-indigo-100/80 shadow-2xs hover:shadow-xs transition-all flex items-center gap-3.5">
+            <div className="p-3 bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-xl shadow-xs shrink-0">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Penjualan Hari Ini</div>
+              <div className="text-2xl font-extrabold text-slate-900 mt-0.5 truncate">{formatRupiah(summary.salesToday)}</div>
+              <div className="text-xs text-slate-400 mt-0.5">Total omset kotor toko</div>
+            </div>
           </div>
-          <div>
-            <div className="text-sm text-gray-500">Keuntungan Hari Ini</div>
-            <div className="text-xl font-semibold text-green-600">{fmtCurrency(summary.profitToday)}</div>
+
+          {/* 2. Keuntungan Hari Ini */}
+          <div className="bg-gradient-to-br from-emerald-50/90 to-teal-50/70 p-5 rounded-xl border border-emerald-100/80 shadow-2xs hover:shadow-xs transition-all flex items-center gap-3.5">
+            <div className="p-3 bg-gradient-to-br from-emerald-600 to-teal-600 text-white rounded-xl shadow-xs shrink-0">
+              <Wallet className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Keuntungan Hari Ini</div>
+              <div className="text-2xl font-extrabold text-emerald-600 mt-0.5 truncate">{formatRupiah(summary.profitToday)}</div>
+              <div className="text-xs text-slate-400 mt-0.5">Laba kotor setelah modal HPP</div>
+            </div>
           </div>
+
+          {/* 3. Total Semua Transaksi */}
+          <div className="bg-gradient-to-br from-sky-50/90 to-blue-50/70 p-5 rounded-xl border border-sky-100/80 shadow-2xs hover:shadow-xs transition-all flex items-center gap-3.5">
+            <div className="p-3 bg-gradient-to-br from-sky-500 to-blue-600 text-white rounded-xl shadow-xs shrink-0">
+              <Receipt className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Transaksi</div>
+              <div className="text-2xl font-extrabold text-slate-900 mt-0.5">{summary.transactionsToday} <span className="text-sm font-semibold text-slate-500">transaksi</span></div>
+              <div className="text-xs text-slate-400 mt-0.5">Semua metode pembayaran</div>
+            </div>
+          </div>
+
+          {/* 4. Rata-rata / Transaksi */}
+          <div className="bg-gradient-to-br from-purple-50/90 to-pink-50/70 p-5 rounded-xl border border-purple-100/80 shadow-2xs hover:shadow-xs transition-all flex items-center gap-3.5">
+            <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 text-white rounded-xl shadow-xs shrink-0">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Rata-rata / Transaksi</div>
+              <div className="text-2xl font-extrabold text-slate-900 mt-0.5 truncate">{formatRupiah(Math.round(summary.avgBasket))}</div>
+              <div className="text-xs text-slate-400 mt-0.5">Nilai rata-rata keranjang</div>
+            </div>
+          </div>
+
         </div>
 
-        <div className="bg-gradient-to-br from-sky-50 to-blue-50 p-4 rounded-xl shadow-lg border-0 hover:shadow-xl transition-all flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-sky-500 to-blue-600 text-white rounded-lg shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 7h18M3 12h18M3 17h18"/></svg>
+        {/* Payment Method Breakdown: Tunai (Cash) & QRIS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white p-5 rounded-xl shadow-2xs border border-sky-200/80 hover:shadow-xs transition-all flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-sky-50 text-sky-600 border border-sky-200/80 rounded-xl shadow-2xs flex items-center justify-center shrink-0">
+                <Banknote className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-sky-800">Transaksi Tunai (Cash)</div>
+                <div className="text-2xl font-black text-slate-900 mt-0.5">{formatRupiah(summary.cashSalesToday)}</div>
+                <div className="text-xs text-slate-500 mt-0.5">Uang fisik kasir yang harus ada di laci hari ini</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-100 text-sky-800 rounded-full font-bold text-xs border border-sky-200 shadow-2xs">
+                <Banknote className="w-3.5 h-3.5" />
+                {summary.cashTransactionsToday} transaksi
+              </span>
+            </div>
           </div>
-          <div>
-            <div className="text-sm text-slate-600">Transaksi Hari Ini</div>
-            <div className="text-xl font-semibold">{summary.transactionsToday}</div>
-          </div>
-        </div>
 
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-4 rounded-xl shadow-lg border-0 hover:shadow-xl transition-all flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-lg shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 8v8M8 12h8"/></svg>
-          </div>
-          <div>
-            <div className="text-sm text-slate-600">Rata-rata / Transaksi</div>
-            <div className="text-xl font-semibold">{fmtCurrency(Math.round(summary.avgBasket))}</div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart - Takes 2 columns */}
-        <div className="lg:col-span-2">
-          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-xl shadow-lg border-0 h-full">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <span className="w-1 h-6 bg-gradient-to-b from-sky-500 to-indigo-500 rounded-full"></span>
-              📈 Penjualan 7 Hari Terakhir
-            </h3>
-            <div className="h-80">
-              <DashboardCharts />
+          <div className="bg-white p-5 rounded-xl shadow-2xs border border-emerald-200/80 hover:shadow-xs transition-all flex items-center justify-between">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-emerald-50 text-emerald-600 border border-emerald-200/80 rounded-xl shadow-2xs flex items-center justify-center shrink-0">
+                <QrCode className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-emerald-800">Transaksi Non-Tunai (QRIS)</div>
+                <div className="text-2xl font-black text-slate-900 mt-0.5">{formatRupiah(summary.qrisSalesToday)}</div>
+                <div className="text-xs text-slate-500 mt-0.5">Dana masuk otomatis ke rekening/e-wallet hari ini</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full font-bold text-xs border border-emerald-200 shadow-2xs">
+                <QrCode className="w-3.5 h-3.5" />
+                {summary.qrisTransactionsToday} transaksi
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Quick Stats - Takes 1 column */}
-        <div className="lg:col-span-1">
-          <QuickStatsCard salesToday={summary.salesToday} profitToday={summary.profitToday} />
-        </div>
-      </div>
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Chart - Takes 2 columns */}
+          <div className="lg:col-span-2">
+            <DashboardCharts />
+          </div>
 
-      {/* Additional Info Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Performance Comparison */}
-        <PerformanceCard />
-
-        {/* Peak Hours */}
-        <PeakHoursCard />
-      </div>
-
-      {/* Recent transactions table */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border-0">
-        <div className="p-4 border-b">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <span className="w-1 h-6 bg-gradient-to-b from-sky-500 to-indigo-500 rounded-full"></span>
-            🧾 Transaksi Terbaru
-          </h3>
-        </div>
-        <div className="p-4">
-          <div className="overflow-x-auto">
-            <RecentTransactionsTable />
+          {/* Quick Stats - Takes 1 column */}
+          <div className="lg:col-span-1">
+            <QuickStatsCard salesToday={summary.salesToday} profitToday={summary.profitToday} />
           </div>
         </div>
-      </div>
+
+        {/* Additional Info Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Performance Comparison */}
+          <PerformanceCard />
+
+          {/* Peak Hours */}
+          <PeakHoursCard />
+        </div>
+
+        {/* Recent transactions table */}
+        <div className="bg-white rounded-xl shadow-2xs border border-slate-200/80">
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <span className="w-1.5 h-5 bg-gradient-to-b from-sky-500 to-indigo-600 rounded-full"></span>
+              <Receipt className="w-4 h-4 text-slate-700" />
+              Transaksi Terbaru Hari Ini
+            </h3>
+            <Link href="/transaksi" className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+              Lihat Semua Transaksi →
+            </Link>
+          </div>
+          <div className="p-4">
+            <div className="overflow-x-auto">
+              <RecentTransactionsTable />
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   )
@@ -198,48 +295,49 @@ async function PerformanceCard() {
   const salesChange = yesterdaySales > 0 ? ((todaySales - yesterdaySales) / yesterdaySales * 100) : 0
   const countChange = yesterdayCount > 0 ? ((todayCount - yesterdayCount) / yesterdayCount * 100) : 0
 
-  const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
-
   return (
-    <div className="bg-gradient-to-br from-violet-50 to-purple-50 p-6 rounded-xl shadow-lg border-0">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="w-1 h-6 bg-gradient-to-b from-violet-500 to-purple-500 rounded-full"></span>
-        📊 Performa vs Kemarin
+    <div className="bg-white p-6 rounded-xl shadow-2xs border border-violet-100">
+      <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <span className="w-1.5 h-5 bg-gradient-to-b from-violet-500 to-purple-600 rounded-full"></span>
+        <TrendingUp className="w-4 h-4 text-violet-600" />
+        Performa vs Kemarin
       </h3>
       <div className="space-y-4">
         {/* Sales Comparison */}
-        <div className="bg-white/60 backdrop-blur-sm p-4 rounded-lg">
+        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-100">
           <div className="text-xs text-slate-500 mb-1">Penjualan</div>
           <div className="flex items-baseline justify-between">
-            <div className="text-xl font-bold text-slate-900">{fmt.format(todaySales)}</div>
-            <div className={`flex items-center gap-1 text-sm font-semibold ${
-              salesChange >= 0 ? 'text-green-600' : 'text-red-600'
+            <div className="text-xl font-bold text-slate-900">{formatRupiah(todaySales)}</div>
+            <div className={`flex items-center gap-0.5 text-xs font-bold ${
+              salesChange >= 0 ? 'text-emerald-600' : 'text-rose-600'
             }`}>
-              {salesChange >= 0 ? '↗' : '↘'} {Math.abs(salesChange).toFixed(1)}%
+              {salesChange >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+              {Math.abs(salesChange).toFixed(1)}%
             </div>
           </div>
-          <div className="text-xs text-slate-400 mt-1">Kemarin: {fmt.format(yesterdaySales)}</div>
+          <div className="text-xs text-slate-400 mt-1">Kemarin: {formatRupiah(yesterdaySales)}</div>
         </div>
 
         {/* Transaction Count Comparison */}
-        <div className="bg-white/60 backdrop-blur-sm p-4 rounded-lg">
+        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-100">
           <div className="text-xs text-slate-500 mb-1">Jumlah Transaksi</div>
           <div className="flex items-baseline justify-between">
             <div className="text-xl font-bold text-slate-900">{todayCount}</div>
-            <div className={`flex items-center gap-1 text-sm font-semibold ${
-              countChange >= 0 ? 'text-green-600' : 'text-red-600'
+            <div className={`flex items-center gap-0.5 text-xs font-bold ${
+              countChange >= 0 ? 'text-emerald-600' : 'text-rose-600'
             }`}>
-              {countChange >= 0 ? '↗' : '↘'} {Math.abs(countChange).toFixed(1)}%
+              {countChange >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+              {Math.abs(countChange).toFixed(1)}%
             </div>
           </div>
           <div className="text-xs text-slate-400 mt-1">Kemarin: {yesterdayCount} transaksi</div>
         </div>
 
         {/* Average Basket */}
-        <div className="bg-white/60 backdrop-blur-sm p-4 rounded-lg">
+        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-100">
           <div className="text-xs text-slate-500 mb-1">Rata-rata per Transaksi</div>
-          <div className="text-xl font-bold text-violet-600">
-            {todayCount > 0 ? fmt.format(todaySales / todayCount) : 'Rp 0'}
+          <div className="text-xl font-bold text-violet-700">
+            {todayCount > 0 ? formatRupiah(todaySales / todayCount) : 'Rp 0'}
           </div>
         </div>
       </div>
@@ -275,16 +373,15 @@ async function PeakHoursCard() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 5)
 
-  const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
-
   return (
-    <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-6 rounded-xl shadow-lg border-0">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="w-1 h-6 bg-gradient-to-b from-amber-500 to-orange-500 rounded-full"></span>
-        ⏰ Jam Tersibuk Hari Ini
+    <div className="bg-white p-6 rounded-xl shadow-2xs border border-amber-100">
+      <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <span className="w-1.5 h-5 bg-gradient-to-b from-amber-500 to-orange-500 rounded-full"></span>
+        <Clock className="w-4 h-4 text-amber-600" />
+        Jam Tersibuk Hari Ini
       </h3>
       {peakHours.length === 0 ? (
-        <div className="text-center py-8 text-slate-500 text-sm">Belum ada transaksi hari ini</div>
+        <div className="text-center py-8 text-slate-400 text-sm">Belum ada transaksi hari ini</div>
       ) : (
         <div className="space-y-3">
           {peakHours.map((item, idx) => {
@@ -292,21 +389,21 @@ async function PeakHoursCard() {
             const percentage = (item.count / maxCount) * 100
             
             return (
-              <div key={item.hour} className="bg-white/60 backdrop-blur-sm p-3 rounded-lg">
+              <div key={item.hour} className="bg-slate-50/80 p-3 rounded-xl border border-slate-100">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center text-xs font-bold">
+                    <div className="w-6 h-6 rounded-lg bg-amber-500 text-white flex items-center justify-center text-xs font-bold">
                       {idx + 1}
                     </div>
                     <div>
-                      <div className="font-medium text-slate-900">
+                      <div className="font-semibold text-slate-900 text-sm">
                         {item.hour.toString().padStart(2, '0')}:00 - {(item.hour + 1).toString().padStart(2, '0')}:00
                       </div>
                       <div className="text-xs text-slate-500">{item.count} transaksi</div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold text-amber-600 text-sm">{fmt.format(item.total)}</div>
+                    <div className="font-bold text-amber-700 text-sm">{formatRupiah(item.total)}</div>
                   </div>
                 </div>
                 <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -325,21 +422,21 @@ async function PeakHoursCard() {
 }
 
 function QuickStatsCard({ salesToday, profitToday }: { salesToday: number; profitToday: number }) {
-  const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 })
   const profitMargin = salesToday > 0 ? (profitToday / salesToday * 100).toFixed(1) : '0.0'
 
   return (
-    <div className="bg-gradient-to-br from-teal-50 to-cyan-50 p-6 rounded-xl shadow-lg border-0">
-      <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-        <span className="w-1 h-6 bg-gradient-to-b from-teal-500 to-cyan-500 rounded-full"></span>
-        💡 Insight Hari Ini
+    <div className="bg-white p-6 rounded-xl shadow-2xs border border-teal-100 h-full">
+      <h3 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <span className="w-1.5 h-5 bg-gradient-to-b from-teal-500 to-cyan-500 rounded-full"></span>
+        <Zap className="w-4 h-4 text-teal-600" />
+        Insight Keuangan Hari Ini
       </h3>
       <div className="space-y-4">
-        <div className="bg-white/60 backdrop-blur-sm p-4 rounded-lg">
+        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-100">
           <div className="text-xs text-slate-500 mb-1">Margin Keuntungan</div>
           <div className="flex items-baseline gap-2">
-            <div className="text-2xl font-bold text-teal-600">{profitMargin}%</div>
-            <div className="text-xs text-slate-500">dari total penjualan</div>
+            <div className="text-2xl font-extrabold text-teal-700">{profitMargin}%</div>
+            <div className="text-xs text-slate-400">dari total omzet</div>
           </div>
           <div className="mt-2 h-2 bg-slate-200 rounded-full overflow-hidden">
             <div 
@@ -349,72 +446,33 @@ function QuickStatsCard({ salesToday, profitToday }: { salesToday: number; profi
           </div>
         </div>
 
-        <div className="bg-white/60 backdrop-blur-sm p-4 rounded-lg">
-          <div className="text-xs text-slate-500 mb-2">Breakdown Hari Ini</div>
+        <div className="bg-slate-50/80 p-4 rounded-xl border border-slate-100">
+          <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2.5">Rincian Hari Ini</div>
           <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-600">💰 Penjualan</span>
-              <span className="font-semibold text-slate-900 text-sm">{fmt.format(salesToday)}</span>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-600 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-slate-400" />
+                Penjualan (Omzet)
+              </span>
+              <span className="font-bold text-slate-900">{formatRupiah(salesToday)}</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-slate-600">📈 Keuntungan</span>
-              <span className="font-semibold text-green-600 text-sm">{fmt.format(profitToday)}</span>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-600 flex items-center gap-1.5">
+                <Wallet className="w-3.5 h-3.5 text-emerald-500" />
+                Laba Bersih
+              </span>
+              <span className="font-bold text-emerald-600">{formatRupiah(profitToday)}</span>
             </div>
-            <div className="flex justify-between items-center pt-2 border-t">
-              <span className="text-sm text-slate-600">💸 Modal Terpakai</span>
-              <span className="font-semibold text-slate-900 text-sm">{fmt.format(salesToday - profitToday)}</span>
+            <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-200/80">
+              <span className="text-slate-600 flex items-center gap-1.5">
+                <Boxes className="w-3.5 h-3.5 text-slate-400" />
+                Modal Produk (HPP)
+              </span>
+              <span className="font-bold text-slate-800">{formatRupiah(salesToday - profitToday)}</span>
             </div>
           </div>
         </div>
       </div>
     </div>
-  )
-}
-
-async function RecentTransactionsTable() {
-  const rows = await prisma.transaction.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 8,
-  })
-
-  const fmt = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' })
-  const dateFmt = new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
-
-  return (
-    <Table className="min-w-full table-fixed text-sm">
-      <TableHeader>
-        <TableRow>
-          <TableHead className="px-3 py-2 w-12">No</TableHead>
-          <TableHead className="px-3 py-2 w-48">Tanggal</TableHead>
-          <TableHead className="px-3 py-2 w-28 text-right">Total</TableHead>
-          <TableHead className="px-3 py-2 w-28 text-right hidden sm:table-cell">Bayar</TableHead>
-          <TableHead className="px-3 py-2 w-28 text-right hidden md:table-cell">Kembali</TableHead>
-          <TableHead className="px-3 py-2 w-28 text-right">Aksi</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((t, idx) => (
-          <TableRow key={t.id} className="align-top">
-            <TableCell className="px-3 py-3 align-top">{idx + 1}</TableCell>
-            <TableCell className="px-3 py-3 align-top truncate max-w-[220px]">{dateFmt.format(new Date(t.createdAt))}</TableCell>
-            <TableCell className="px-3 py-3 text-right align-top">{fmt.format(t.total ?? 0)}</TableCell>
-            <TableCell className="px-3 py-3 text-right align-top hidden sm:table-cell">{fmt.format(t.paid ?? 0)}</TableCell>
-            <TableCell className="px-3 py-3 text-right align-top hidden md:table-cell">{fmt.format(t.change ?? 0)}</TableCell>
-            <TableCell className="px-3 py-3 text-right align-top">
-              <div className="flex items-center justify-end gap-2">
-                <Link href={`/transaksi`} className="text-sm text-sky-600 hover:underline">Lihat</Link>
-                <a href={`/api/print/transaction/${t.id}`} className="text-sm text-gray-600">Cetak</a>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-
-        {rows.length === 0 && (
-          <TableRow>
-            <TableCell colSpan={6} className="text-center py-6">Belum ada transaksi</TableCell>
-          </TableRow>
-        )}
-      </TableBody>
-    </Table>
   )
 }

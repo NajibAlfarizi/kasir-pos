@@ -2,11 +2,14 @@
 
 import * as React from "react"
 import { PrintCheck } from './print-check'
+import { Clock } from 'lucide-react'
 
 export function NavBar() {
   const [dateTime, setDateTime] = React.useState<string>("");
+  const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
+    setMounted(true);
     const updateDateTime = () => {
       const now = new Date();
       const options: Intl.DateTimeFormatOptions = {
@@ -27,16 +30,21 @@ export function NavBar() {
   }, []);
   
   return (
-    <nav className="w-full h-16 border-b bg-white px-8 flex items-center">
-      {/* Left spacer for alignment with sidebar */}
-      <div className="flex-1" />
-      {/* Center content */}
-      <div className="flex-1 flex justify-center items-center">
-        <span className="text-lg text-gray-700 font-semibold">Selamat datang di KasirQu</span>
+    <nav className="w-full h-16 border-b border-slate-200/80 bg-white/95 backdrop-blur-xs px-6 lg:px-8 flex items-center justify-between shadow-2xs">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="text-sm font-semibold text-slate-800">KasirQu Point of Sale</span>
+        </div>
       </div>
-      {/* Right: Date and Time + Print Check */}
-      <div className="flex-1 flex justify-end items-center gap-4">
-        <span className="font-semibold text-gray-700 text-right block whitespace-nowrap text-base">{dateTime}</span>
+
+      <div className="flex items-center gap-4">
+        {mounted && dateTime && (
+          <div suppressHydrationWarning className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200/70">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <span suppressHydrationWarning>{dateTime}</span>
+          </div>
+        )}
         <PrintCheck />
       </div>
     </nav>

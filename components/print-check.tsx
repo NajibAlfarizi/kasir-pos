@@ -45,19 +45,44 @@ export function PrintCheck() {
       <SheetTrigger asChild>
         <Button variant="ghost"><Printer className="w-4 h-4 mr-2" />Cek Printer</Button>
       </SheetTrigger>
-      <SheetContent side="right">
-        <SheetHeader>
-          <SheetTitle>Pengecekan Printer</SheetTitle>
-          <SheetDescription>Kirim struk test ke printer yang terhubung pada server.</SheetDescription>
-        </SheetHeader>
+      <SheetContent side="right" className="sm:max-w-md flex flex-col justify-between">
+        <div>
+          <SheetHeader className="pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                <Printer className="w-5 h-5" />
+              </div>
+              <div>
+                <SheetTitle className="text-base font-bold text-slate-900">Pengecekan Printer</SheetTitle>
+                <SheetDescription className="text-xs text-slate-500">Kirim struk uji coba ke printer thermal yang terpasang.</SheetDescription>
+              </div>
+            </div>
+          </SheetHeader>
 
-        <div className="mt-4 space-y-3 p-4">
-          <label className="block text-sm">Label pada struk</label>
-          <Input value={label} onChange={(e) => setLabel(e.target.value)} />
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setOpen(false)}>Batal</Button>
-            <Button onClick={runCheck} disabled={loading}>{loading ? 'Mengirim...' : 'Kirim Test'}</Button>
+          <div className="p-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Label pada Struk Uji Coba</label>
+              <Input
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className="h-9 rounded-lg border-slate-200 text-sm focus-visible:ring-indigo-500"
+              />
+            </div>
           </div>
+        </div>
+
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => setOpen(false)} className="rounded-lg h-9">
+            Batal
+          </Button>
+          <Button
+            size="sm"
+            onClick={runCheck}
+            disabled={loading}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg h-9 text-xs font-medium shadow-xs"
+          >
+            {loading ? 'Mengirim...' : 'Kirim Struk Uji'}
+          </Button>
         </div>
       </SheetContent>
     </Sheet>

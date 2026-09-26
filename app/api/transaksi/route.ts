@@ -13,9 +13,17 @@ type CreateItem = { productId?: number; quantity: number; price?: number; name?:
 export async function POST(req: Request) {
   try {
     const body = await req.json()
-    const { items, paid } = body
+    const { items, paid: inputPaid, paymentMethod: rawMethod } = body
+    const paymentMethod = rawMethod === 'QRIS' ? 'QRIS' : 'CASH'
+
     if (!Array.isArray(items) || items.length === 0) return new Response(JSON.stringify({ error: 'Items are required' }), { status: 400 })
-    if (typeof paid !== 'number' || !Number.isInteger(paid) || paid < 0) return new Response(JSON.stringify({ error: 'paid must be a non-negative integer' }), { status: 400 })
+
+    let paid = Number(inputPaid)
+    if (paymentMethod === 'CASH') {
+      if (typeof inputPaid !== 'number' || !Number.isInteger(inputPaid) || inputPaid < 0) {
+        return new Response(JSON.stringify({ error: 'paid must be a non-negative integer' }), { status: 400 })
+      }
+    }
 
     // validate items: allow either productId (existing product) OR manual item with name + price
     const parsedItems: CreateItem[] = []
@@ -74,10 +82,25 @@ export async function POST(req: Request) {
         }
       }
 
-      if (paid < total) throw new Error('Paid amount is less than total')
+      // If QRIS, paid is always exact total and change is 0
+      if (paymentMethod === 'QRIS') {
+        paid = total
+      } else {
+        if (paid < total) throw new Error('Jumlah uang tunai kurang dari total belanja')
+      }
+
+      const change = paymentMethod === 'QRIS' ? 0 : (paid - total)
 
       // Create transaction header first
-      const created = await tx.transaction.create({ data: { total, paid, change: paid - total } })
+      const transactionData = {
+        total,
+        paid,
+        change,
+        paymentMethod,
+      }
+      const created = await tx.transaction.create({
+        data: transactionData as any,
+      })
 
       // Batch create transaction items to reduce roundtrips
       await tx.transactionItem.createMany({
@@ -184,6 +207,10 @@ export async function GET(req: Request) {
       if (from) createdAtFilter.gte = new Date(from)
       if (to) createdAtFilter.lte = new Date(to)
       where.createdAt = createdAtFilter
+    }
+    const paymentMethod = url.searchParams.get('paymentMethod')
+    if (paymentMethod && (paymentMethod === 'CASH' || paymentMethod === 'QRIS')) {
+      (where as any).paymentMethod = paymentMethod
     }
 
     const total = await prisma.transaction.count({ where })

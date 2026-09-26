@@ -4,27 +4,28 @@ import * as React from "react"
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Bot,
-  GalleryVerticalEnd,
-  BookOpen,
-  PieChart,
-  Settings2,
-  SquareTerminal,
+  LayoutDashboard,
+  ShoppingCart,
+  Package,
+  FolderTree,
   Tag,
-  FileText,
+  Receipt,
+  BarChart3,
+  Settings,
+  Store,
 } from "lucide-react"
 
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar"
 
 const navItems = [
-  { title: 'Dashboard', url: '/dashboard', icon: SquareTerminal },
-  { title: 'Kasir', url: '/kasir', icon: Bot },
-  { title: 'Produk', url: '/produk', icon: GalleryVerticalEnd },
-  { title: 'Kategori', url: '/kategori', icon: BookOpen },
+  { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
+  { title: 'Kasir', url: '/kasir', icon: ShoppingCart },
+  { title: 'Produk', url: '/produk', icon: Package },
+  { title: 'Kategori', url: '/kategori', icon: FolderTree },
   { title: 'Brand', url: '/brand', icon: Tag },
-  { title: 'Transaksi', url: '/transaksi', icon: PieChart },
-  { title: 'Laporan', url: '/laporan', icon: FileText },
-  { title: 'Pengaturan', url: '/settings', icon: Settings2 },
+  { title: 'Transaksi', url: '/transaksi', icon: Receipt },
+  { title: 'Laporan', url: '/laporan', icon: BarChart3 },
+  { title: 'Pengaturan', url: '/settings', icon: Settings },
 ]
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
@@ -75,33 +76,35 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <div className="px-4 py-4 border-b bg-gradient-to-br from-sky-50 to-indigo-50">
-          <div className="space-y-1 text-center flex flex-col items-center">
-            {/* Nama Toko */}
-            <h1 className="text-lg font-bold bg-gradient-to-r from-sky-600 to-indigo-600 bg-clip-text text-transparent">{storeName}</h1>
-            
-            {/* Nama Aplikasi - Hardcoded */}
-            <div className="flex items-center gap-2 justify-center">
-              <div className="w-6 h-6 rounded bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-md">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <span className="text-sm font-semibold bg-gradient-to-r from-sky-600 to-indigo-600 bg-clip-text text-transparent">KasirQu</span>
+      <SidebarHeader className="p-3 border-b border-slate-200/80 bg-white">
+        <div className="rounded-xl bg-gradient-to-b from-indigo-50/40 via-slate-50/20 to-white p-3.5 border border-slate-200/80 shadow-2xs flex flex-col items-center text-center">
+          {/* Nama Toko */}
+          <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600/70 mb-0.5">Toko</div>
+          <h1 className="text-lg font-black text-slate-900 tracking-tight leading-tight w-full truncate" title={storeName}>
+            {storeName}
+          </h1>
+
+          {/* Nama Aplikasi dengan Icon */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-indigo-50 border border-indigo-100/80 mt-2 shadow-2xs">
+            <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white shrink-0 shadow-xs">
+              <Store className="w-3 h-3 text-white" />
             </div>
-            
-            {/* Credit Developer - Hardcoded */}
-            <div className="pt-2 border-t w-full">
-              <p className="text-xs text-slate-500">Developed by</p>
-              <p className="text-xs font-medium text-slate-700">Najib Alfarizi</p>
-            </div>
+            <span className="text-xs font-bold text-indigo-700 tracking-tight">KasirQu</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          </div>
+
+          {/* Credit Developer */}
+          <div className="mt-3 pt-2.5 border-t border-slate-100 w-full flex items-center justify-between px-1 text-[11px]">
+            <span className="text-slate-400 font-medium">Developed by</span>
+            <span className="font-bold text-slate-800 hover:text-indigo-600 transition-colors">
+              Najib Alfarizi
+            </span>
           </div>
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
-        <nav className="flex flex-col py-2">
+      <SidebarContent className="bg-white">
+        <nav className="flex flex-col py-3 px-2 space-y-1">
           {navItems.map((it) => {
             const Icon = it.icon
             const active = pathname === it.url || pathname.startsWith(it.url + '/')
@@ -111,25 +114,38 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 href={it.url}
                 prefetch
                 onMouseEnter={() => router.prefetch(it.url)}
-                className={`flex items-center gap-3 px-4 py-3 mx-2 rounded-lg mb-1 transition-all ${active ? 'bg-gradient-to-r from-sky-100 to-indigo-100 text-sky-700 shadow-md' : 'text-slate-700 hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100'}`}
+                className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 ${
+                  active
+                    ? 'bg-indigo-50/90 text-indigo-700 font-semibold border border-indigo-100/90 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 font-medium'
+                }`}
               >
-                <span className={`p-1 rounded-md ${active ? 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white shadow-sm' : 'text-slate-500'}`}><Icon className="w-5 h-5" /></span>
-                <span className="text-sm font-medium">{it.title}</span>
+                <span
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    active
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 group-hover:text-slate-700 bg-slate-100/80'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                </span>
+                <span className="text-xs font-semibold tracking-tight">{it.title}</span>
               </Link>
             )
           })}
         </nav>
       </SidebarContent>
 
-      <SidebarFooter>
-        <div className="px-4 py-4 bg-gradient-to-br from-slate-50 to-slate-100 border-t">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white font-semibold shadow-lg">A</div>
-            <div>
-              <div className="text-sm font-medium text-slate-900">Admin</div>
-              <div className="text-xs text-slate-500">admin@kasir.com</div>
-            </div>
+      <SidebarFooter className="border-t border-slate-200/80 bg-white p-3">
+        <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50/80 border border-slate-200/60 shadow-2xs">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-sky-500 flex items-center justify-center text-white text-xs font-bold shadow-xs shrink-0">
+            A
           </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-slate-900 truncate leading-tight">Admin Toko</div>
+            <div className="text-[11px] text-slate-500 truncate mt-0.5">admin@kasir.com</div>
+          </div>
+          <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Online" />
         </div>
       </SidebarFooter>
     </Sidebar>

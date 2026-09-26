@@ -171,16 +171,34 @@ export async function POST(req: Request, context: any) {
   printer.text(leftPart + rightPart)
     }
   printer.text(SEP)
-  // totals: try tableCustom but fallback to plain lines
-    try {
+  // totals & payment method: try tableCustom but fallback to plain lines
+  const isQris = (tx as any).paymentMethod === 'QRIS'
+  const methodStr = isQris ? 'QRIS' : 'TUNAI'
+
+  try {
+    await safeTableCustom([
+      { text: 'TOTAL', align: 'LEFT', width: 0.4, style: 'B' },
+      { text: String(fmt.format(tx.total ?? 0)), align: 'RIGHT', width: 0.4, style: 'B' }
+    ], { encoding: 'cp857' })
+    await safeTableCustom([
+      { text: `BAYAR (${methodStr})`, align: 'LEFT', width: 0.5 },
+      { text: String(fmt.format(tx.paid ?? (isQris ? tx.total : 0))), align: 'RIGHT', width: 0.5 }
+    ], { encoding: 'cp857' })
+    if (!isQris) {
       await safeTableCustom([
-        { text: 'TOTAL', align: 'LEFT', width: 0.4, style: 'B' },
-        { text: String(fmt.format(tx.total ?? 0)), align: 'RIGHT', width: 0.4, style: 'B' }
+        { text: 'KEMBALI', align: 'LEFT', width: 0.5 },
+        { text: String(fmt.format(tx.change ?? 0)), align: 'RIGHT', width: 0.5 }
       ], { encoding: 'cp857' })
-    } catch (tErr) {
-      console.warn('printer.tableCustom failed for totals or unsupported signature, falling back', tErr)
-      printer.text(`TOTAL ${String(fmt.format(tx.total ?? 0))}`)
     }
+  } catch (tErr) {
+    console.warn('printer.tableCustom failed for totals or unsupported signature, falling back', tErr)
+    printer.text(`TOTAL   : ${String(fmt.format(tx.total ?? 0))}`)
+    printer.text(`METODE  : ${methodStr}`)
+    printer.text(`BAYAR   : ${String(fmt.format(tx.paid ?? tx.total))}`)
+    if (!isQris) {
+      printer.text(`KEMBALI : ${String(fmt.format(tx.change ?? 0))}`)
+    }
+  }
     printer.text('')
     // footer: use receiptFooter if provided, otherwise show polite default
     if (receiptFooter && String(receiptFooter).trim().length > 0) {

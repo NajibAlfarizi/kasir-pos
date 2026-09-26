@@ -1,9 +1,24 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { calculateItemProfit } from '@/lib/profit-calculation'
 
-// Reports can be cached longer since they're historical
-export const revalidate = 1800
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+function parseDateRange(startDateStr: string, endDateStr: string) {
+  const [startY, startM, startD] = startDateStr.split('-').map(Number)
+  const [endY, endM, endD] = endDateStr.split('-').map(Number)
+
+  // Indonesia WIB is UTC+7 (7 hours ahead of UTC)
+  const tzOffsetMs = 7 * 60 * 60 * 1000
+
+  // Start of day in WIB (00:00:00.000)
+  const startDate = new Date(Date.UTC(startY, startM - 1, startD, 0, 0, 0, 0) - tzOffsetMs)
+
+  // End of day in WIB (23:59:59.999)
+  const endDate = new Date(Date.UTC(endY, endM - 1, endD, 23, 59, 59, 999) - tzOffsetMs)
+
+  return { startDate, endDate }
+}
 
 export async function GET(req: Request) {
   try {
@@ -12,16 +27,12 @@ export async function GET(req: Request) {
     const endDateStr = searchParams.get('endDate')
 
     if (!startDateStr || !endDateStr) {
-      return NextResponse.json({ error: 'startDate and endDate are required' }, { status: 400 })
+      return NextResponse.json({ error: 'startDate dan endDate wajib diisi (format YYYY-MM-DD)' }, { status: 400 })
     }
 
-    const startDate = new Date(startDateStr)
-    startDate.setHours(0, 0, 0, 0)
+    const { startDate, endDate } = parseDateRange(startDateStr, endDateStr)
 
-    const endDate = new Date(endDateStr)
-    endDate.setHours(23, 59, 59, 999)
-
-    // Get all transactions in the period
+    // Get all transactions in the requested period
     const transactions = await prisma.transaction.findMany({
       where: {
         createdAt: {
@@ -41,84 +52,143 @@ export async function GET(req: Request) {
       },
     })
 
-    // Calculate summary
+    // Summary totals
     let totalSales = 0
+    let totalCost = 0
     let totalProfit = 0
+    let totalCash = 0
+    let totalQris = 0
+    let countCash = 0
+    let countQris = 0
+    let totalItemsSold = 0
     const totalTransactions = transactions.length
 
     // Product statistics
-    const productStats: Record<string, { name: string; quantity: number; revenue: number; profit: number }> = {}
+    const productStats: Record<string, { id?: number; name: string; quantity: number; revenue: number; cost: number; profit: number }> = {}
 
-    // Daily sales
-    const dailyStats: Record<string, { sales: number; profit: number; transactions: number }> = {}
+    // Daily & Monthly sales aggregates
+    const dailyStats: Record<string, { date: string; sales: number; cost: number; profit: number; transactions: number }> = {}
+    const monthlyStats: Record<string, { month: string; sales: number; cost: number; profit: number; transactions: number }> = {}
+
+    const jakartaDateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' })
 
     for (const tx of transactions) {
       totalSales += tx.total
 
-      for (const item of tx.items) {
-        const itemProfit = calculateItemProfit(item)
-        totalProfit += itemProfit
-
-        // Product stats
-        const productName = item.product?.name || item.name || 'Produk Tidak Diketahui'
-        if (!productStats[productName]) {
-          productStats[productName] = {
-            name: productName,
-            quantity: 0,
-            revenue: 0,
-            profit: 0,
-          }
-        }
-        productStats[productName].quantity += item.quantity
-        productStats[productName].revenue += item.subtotal
-        productStats[productName].profit += itemProfit
+      const isQris = (tx as any).paymentMethod === 'QRIS'
+      if (isQris) {
+        totalQris += tx.total
+        countQris += 1
+      } else {
+        totalCash += tx.total
+        countCash += 1
       }
 
-      // Daily stats
-      const dateKey = tx.createdAt.toISOString().split('T')[0]
+      // Exact local date key in Asia/Jakarta (WIB)
+      const txDate = new Date(tx.createdAt)
+      const dateKey = jakartaDateFmt.format(txDate) // "YYYY-MM-DD"
+      const monthKey = dateKey.substring(0, 7)      // "YYYY-MM"
+
       if (!dailyStats[dateKey]) {
-        dailyStats[dateKey] = { sales: 0, profit: 0, transactions: 0 }
+        dailyStats[dateKey] = { date: dateKey, sales: 0, cost: 0, profit: 0, transactions: 0 }
       }
       dailyStats[dateKey].sales += tx.total
       dailyStats[dateKey].transactions += 1
 
-      // Calculate profit for this transaction using utility
-      let txProfit = 0
-      for (const item of tx.items) {
-        txProfit += calculateItemProfit(item)
+      if (!monthlyStats[monthKey]) {
+        monthlyStats[monthKey] = { month: monthKey, sales: 0, cost: 0, profit: 0, transactions: 0 }
       }
+      monthlyStats[monthKey].sales += tx.total
+      monthlyStats[monthKey].transactions += 1
+
+      let txCost = 0
+      let txProfit = 0
+
+      for (const item of tx.items) {
+        const itemQty = Number(item.quantity) || 0
+        const itemPrice = Number(item.price) || Number(item.product?.price) || 0
+        const itemSubtotal = typeof item.subtotal === 'number' ? item.subtotal : (itemPrice * itemQty)
+        const itemCostPrice = Number(item.product?.cost) || 0
+        const itemTotalCost = itemCostPrice * itemQty
+        const itemNetProfit = itemSubtotal - itemTotalCost
+
+        totalCost += itemTotalCost
+        totalProfit += itemNetProfit
+        totalItemsSold += itemQty
+        txCost += itemTotalCost
+        txProfit += itemNetProfit
+
+        // Product stats aggregation
+        const prodKey = item.productId ? `id_${item.productId}` : (item.product?.name || item.name || 'Produk Tidak Diketahui')
+        const prodName = item.product?.name || item.name || 'Produk Tidak Diketahui'
+
+        if (!productStats[prodKey]) {
+          productStats[prodKey] = {
+            id: item.productId || undefined,
+            name: prodName,
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+            profit: 0,
+          }
+        }
+        productStats[prodKey].quantity += itemQty
+        productStats[prodKey].revenue += itemSubtotal
+        productStats[prodKey].cost += itemTotalCost
+        productStats[prodKey].profit += itemNetProfit
+      }
+
+      dailyStats[dateKey].cost += txCost
       dailyStats[dateKey].profit += txProfit
+      monthlyStats[monthKey].cost += txCost
+      monthlyStats[monthKey].profit += txProfit
     }
 
-    // Sort products by quantity sold
+    // Top products sorted by quantity sold desc
     const topProducts = Object.values(productStats)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 10)
-
-    // Convert daily stats to array and sort by date
-    const dailySales = Object.entries(dailyStats)
-      .map(([date, stats]) => ({
-        date,
-        ...stats,
+      .map(p => ({
+        ...p,
+        margin: p.revenue > 0 ? Number(((p.profit / p.revenue) * 100).toFixed(1)) : 0
       }))
-      .sort((a, b) => a.date.localeCompare(b.date))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 15)
 
-    const avgBasket = totalTransactions > 0 ? totalSales / totalTransactions : 0
+    // Daily sales sorted chronologically
+    const dailySales = Object.values(dailyStats).sort((a, b) => a.date.localeCompare(b.date))
+
+    // Monthly sales sorted chronologically
+    const monthlySales = Object.values(monthlyStats).sort((a, b) => a.month.localeCompare(b.month))
+
+    const avgBasket = totalTransactions > 0 ? Math.round(totalSales / totalTransactions) : 0
+    const avgItems = totalTransactions > 0 ? Number((totalItemsSold / totalTransactions).toFixed(1)) : 0
+    const profitMargin = totalSales > 0 ? Number(((totalProfit / totalSales) * 100).toFixed(1)) : 0
 
     return NextResponse.json({
+      startDate: startDateStr,
+      endDate: endDateStr,
       totalSales,
+      totalCost,
       totalProfit,
+      profitMargin,
       totalTransactions,
+      totalItemsSold,
+      totalCash,
+      totalQris,
+      countCash,
+      countQris,
       avgBasket,
+      avgItems,
       topProducts,
       dailySales,
+      monthlySales,
     }, {
       headers: {
-        'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       }
     })
   } catch (err) {
     console.error('Error generating report:', err)
-    return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 })
+    return NextResponse.json({ error: 'Gagal membuat laporan penjualan' }, { status: 500 })
   }
 }
+

@@ -6,6 +6,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/com
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { Spinner } from "@/components/ui/spinner"
+import { FolderTree } from "lucide-react"
 
 type Props = {
   open: boolean
@@ -62,27 +64,58 @@ export default function ModalKategori({ open, onClose, onSaved, editing }: Props
 
   return (
     <Sheet open={open} onOpenChange={(v) => (v ? null : onClose())}>
-      <SheetContent side="right">
-        <SheetHeader>
-          <SheetTitle>{editing ? 'Edit Kategori' : 'Buat Kategori'}</SheetTitle>
-        </SheetHeader>
-        <form onSubmit={onSubmit} className="p-4">
-          <div className="mb-3">
-            <label className="block text-sm mb-1">Nama</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div className="mb-3">
-            <label className="block text-sm mb-1">Deskripsi</label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-          </div>
-          {error && <div className="text-sm text-destructive mb-2">{error}</div>}
-          <Separator />
-          <SheetFooter className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={onClose}>Batal</Button>
-            <Button type="submit" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</Button>
+      <SheetContent side="right" className="sm:max-w-md flex flex-col justify-between">
+        <div>
+          <SheetHeader className="pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                <FolderTree className="w-5 h-5" />
+              </div>
+              <SheetTitle className="text-base font-bold text-slate-900">
+                {editing ? 'Edit Kategori' : 'Buat Kategori Baru'}
+              </SheetTitle>
+            </div>
+          </SheetHeader>
+          <form id="kategori-form" onSubmit={onSubmit} className="p-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Nama Kategori <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                placeholder="Contoh: Minuman, Makanan Ringan..."
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="h-9 rounded-lg border-slate-200 text-sm focus-visible:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Deskripsi (Opsional)</label>
+              <Input
+                placeholder="Deskripsi singkat kategori..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-9 rounded-lg border-slate-200 text-sm focus-visible:ring-indigo-500"
+              />
+            </div>
+            {error && <div className="text-xs text-rose-600 bg-rose-50 p-2.5 rounded-lg border border-rose-200">{error}</div>}
+          </form>
+        </div>
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          <SheetFooter className="flex flex-row justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} className="rounded-lg h-9">
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              form="kategori-form"
+              disabled={saving}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg h-9 text-xs font-medium shadow-xs"
+            >
+              {saving ? <><Spinner className="mr-1.5" /> Menyimpan...</> : 'Simpan Kategori'}
+            </Button>
           </SheetFooter>
-        </form>
+        </div>
       </SheetContent>
     </Sheet>
   )
-}
+}

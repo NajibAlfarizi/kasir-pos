@@ -1,52 +1,67 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
-// Revalidate every 10 minutes
-export const revalidate = 600
+// Revalidate every 5 minutes
+export const revalidate = 300
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const now = new Date()
-    const sevenDaysAgo = new Date(now)
-    sevenDaysAgo.setDate(now.getDate() - 6)
-    sevenDaysAgo.setHours(0,0,0,0)
+    const url = new URL(req.url)
+    const daysParam = parseInt(url.searchParams.get('days') || '7', 10)
+    const daysCount = Math.min(Math.max(isNaN(daysParam) ? 7 : daysParam, 1), 90)
 
-    // Single query with groupBy instead of 7 separate aggregate calls
+    const now = new Date()
+    const startDate = new Date(now)
+    startDate.setDate(now.getDate() - (daysCount - 1))
+    startDate.setHours(0, 0, 0, 0)
+
+    // Aggregate transactions within date range
     const results = await prisma.transaction.groupBy({
       by: ['createdAt'],
       _sum: { total: true },
+      _count: { id: true },
       where: { 
         createdAt: { 
-          gte: sevenDaysAgo,
+          gte: startDate,
           lt: new Date(now.getTime() + 86400000) // Until end of today
         }
       },
       orderBy: { createdAt: 'asc' },
     })
 
-    // Create a map of date to total for quick lookup
-    const dateMap = new Map<string, number>()
+    // Create a map of date to totals and counts
+    const dateMap = new Map<string, { total: number; count: number }>()
     results.forEach((r) => {
       const dateStr = new Date(r.createdAt).toISOString().slice(0, 10)
-      dateMap.set(dateStr, (dateMap.get(dateStr) || 0) + (r._sum.total || 0))
+      const existing = dateMap.get(dateStr) || { total: 0, count: 0 }
+      dateMap.set(dateStr, {
+        total: existing.total + (r._sum.total || 0),
+        count: existing.count + (r._count?.id || 1),
+      })
     })
 
     // Fill in missing days with 0
     const days = []
-    for (let i = 6; i >= 0; i--) {
+    for (let i = daysCount - 1; i >= 0; i--) {
       const d = new Date(now)
       d.setDate(now.getDate() - i)
       const dateStr = d.toISOString().slice(0, 10)
-      days.push({ date: dateStr, total: dateMap.get(dateStr) || 0 })
+      const data = dateMap.get(dateStr) || { total: 0, count: 0 }
+      days.push({ 
+        date: dateStr, 
+        total: data.total, 
+        count: data.count 
+      })
     }
 
     return NextResponse.json(days, {
       headers: {
-        'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=1200',
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
       }
     })
   } catch (err) {
-    console.error(err)
+    console.error('Failed to load dashboard sales chart data:', err)
     return NextResponse.json({ error: 'Failed to load sales' }, { status: 500 })
   }
 }
+

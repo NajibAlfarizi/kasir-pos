@@ -5,12 +5,14 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/com
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { Spinner } from '@/components/ui/spinner'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
+import { Tag, ChevronDown, Check } from 'lucide-react'
 import { toast } from 'sonner'
 
 type Props = {
@@ -81,56 +83,95 @@ export default function ModalBrand({ open, onOpenChange, onSaved, editing }: Pro
 
   return (
     <Sheet open={open} onOpenChange={(v) => onOpenChange && onOpenChange(v)}>
-      <SheetContent side="right">
-        <SheetHeader>
-          <SheetTitle className="text-lg">{editing ? 'Edit Brand' : 'Buat Brand'}</SheetTitle>
-        </SheetHeader>
+      <SheetContent side="right" className="sm:max-w-md flex flex-col justify-between">
+        <div>
+          <SheetHeader className="pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                <Tag className="w-5 h-5" />
+              </div>
+              <SheetTitle className="text-base font-bold text-slate-900">
+                {editing ? 'Edit Brand' : 'Buat Brand Baru'}
+              </SheetTitle>
+            </div>
+          </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="p-4">
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Nama <span className="text-destructive">*</span></label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama brand" />
-          </div>
+          <form id="brand-form" onSubmit={handleSubmit} className="p-4 space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Nama Brand <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Contoh: Aqua, Indomie, Unilever..."
+                className="h-9 rounded-lg border-slate-200 text-sm focus-visible:ring-indigo-500"
+              />
+            </div>
 
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-1">Kategori</label>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white shadow-sm text-sm hover:shadow-md w-44 text-left">
-                  <span className="font-medium">{categoryId === null ? 'Pilih Kategori' : (categories.find(c => c.id === categoryId)?.name ?? 'Kategori')}</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-500 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </DropdownMenuTrigger>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Kategori Terkait</label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="inline-flex items-center justify-between w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors h-9">
+                    <span>{categoryId === null ? 'Pilih Kategori (Opsional)' : (categories.find(c => c.id === categoryId)?.name ?? 'Kategori')}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+                </DropdownMenuTrigger>
 
-              <DropdownMenuContent className="w-44">
-                <div className="px-2 py-1">
-                  <input value={catFilter} onChange={(e) => setCatFilter(e.target.value)} placeholder="Cari kategori..." className="w-full border rounded px-2 py-1 text-sm" />
-                </div>
-                <div className="max-h-56 overflow-auto">
-                  {categories.filter(c => c.name.toLowerCase().includes(catFilter.toLowerCase())).map(cat => (
-                    <DropdownMenuItem key={cat.id} onSelect={() => { setCategoryId(cat.id); setCatFilter('') }}>
+                <DropdownMenuContent className="w-72 p-1 rounded-xl shadow-lg border-slate-200">
+                  <div className="px-2 py-1.5 border-b border-slate-100 mb-1">
+                    <input
+                      value={catFilter}
+                      onChange={(e) => setCatFilter(e.target.value)}
+                      placeholder="Cari kategori..."
+                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-xs focus:outline-hidden focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-auto">
+                    <DropdownMenuItem
+                      onSelect={() => { setCategoryId(null); setCatFilter('') }}
+                      className="text-xs rounded-lg cursor-pointer"
+                    >
                       <div className="flex items-center justify-between w-full">
-                        <span>{cat.name}</span>
-                        {categoryId === cat.id ? <span className="text-sky-600">✓</span> : null}
+                        <span>Tanpa Kategori</span>
+                        {categoryId === null ? <Check className="w-3.5 h-3.5 text-indigo-600" /> : null}
                       </div>
                     </DropdownMenuItem>
-                  ))}
-                </div>
-                <DropdownMenuItem onSelect={() => { setCategoryId(null); setCatFilter('') }}>
-                  Tidak ada Kategori
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                    {categories.filter(c => c.name.toLowerCase().includes(catFilter.toLowerCase())).map(cat => (
+                      <DropdownMenuItem
+                        key={cat.id}
+                        onSelect={() => { setCategoryId(cat.id); setCatFilter('') }}
+                        className="text-xs rounded-lg cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span>{cat.name}</span>
+                          {categoryId === cat.id ? <Check className="w-3.5 h-3.5 text-indigo-600" /> : null}
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </form>
+        </div>
 
-          <Separator />
-          <SheetFooter className="flex justify-end gap-2 mt-4">
-            <Button variant="ghost" onClick={close}>Batal</Button>
-            <Button type="submit" className="bg-sky-600 text-white" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</Button>
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          <SheetFooter className="flex flex-row justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={close} className="rounded-lg h-9">
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              form="brand-form"
+              disabled={saving}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg h-9 text-xs font-medium shadow-xs"
+            >
+              {saving ? <><Spinner className="mr-1.5" /> Menyimpan...</> : 'Simpan Brand'}
+            </Button>
           </SheetFooter>
-        </form>
+        </div>
       </SheetContent>
     </Sheet>
   )
